@@ -1,16 +1,17 @@
-"""Tests for the Draw, Meld, and Tuck actions (src/innovation/engine/actions.py)."""
+"""Tests for the Draw, Meld, Tuck, and Dogma actions (src/innovation/engine/actions.py)."""
 
 import pytest
 
 from innovation.engine.actions import (
     SupplyExhaustedError,
+    dogma,
     draw,
     draw_and_meld,
     draw_and_tuck,
     meld,
     tuck,
 )
-from innovation.model.card import Card, CardIcons
+from innovation.model.card import Card, CardIcons, Dogma
 from innovation.model.enums import Color, Icon, Splay
 from innovation.model.game_state import GameState
 from innovation.model.pile import Pile
@@ -362,3 +363,107 @@ def test_draw_and_tuck_rejects_an_age_outside_one_through_ten(age: int) -> None:
 
     with pytest.raises(ValueError, match="age"):
         draw_and_tuck(state, player_index=0, age=age)
+
+
+def _card_with_dogmas(name: str, *dogmas: Dogma, color: Color = Color.RED) -> Card:
+    return Card(
+        name=name,
+        age=1,
+        color=color,
+        icons=CardIcons(
+            top_left=Icon.NONE,
+            bottom_left=Icon.NONE,
+            bottom_center=Icon.NONE,
+            bottom_right=Icon.NONE,
+        ),
+        dogmas=dogmas,
+    )
+
+
+def test_dogma_applies_the_named_cards_effect_for_the_acting_player() -> None:
+    def draw_two_ones(state: GameState, player_index: int) -> GameState:
+        state, _ = draw(state, player_index, age=1)
+        state, _ = draw(state, player_index, age=1)
+        return state
+
+    active_card = _card_with_dogmas(
+        "Effectful", Dogma(text="Draw two 1s.", icon=Icon.CROWN, effect=draw_two_ones)
+    )
+    card_a = _card("A", age=1)
+    card_b = _card("B", age=1)
+    player = PlayerState(name="Ada", board={Color.RED: Pile(cards=(active_card,))})
+    state = GameState(players=(player,), supply={1: (card_a, card_b)})
+
+    new_state = dogma(state, player_index=0, card_name="Effectful")
+
+    assert new_state.players[0].hand == (card_a, card_b)
+
+
+def test_dogma_does_not_modify_the_original_state() -> None:
+    def draw_one(state: GameState, player_index: int) -> GameState:
+        state, _ = draw(state, player_index, age=1)
+        return state
+
+    active_card = _card_with_dogmas(
+        "Effectful", Dogma(text="Draw a 1.", icon=Icon.CROWN, effect=draw_one)
+    )
+    card_a = _card("A", age=1)
+    player = PlayerState(name="Ada", board={Color.RED: Pile(cards=(active_card,))})
+    state = GameState(players=(player,), supply={1: (card_a,)})
+
+    dogma(state, player_index=0, card_name="Effectful")
+
+    assert state.players[0].hand == ()
+    assert state.supply[1] == (card_a,)
+
+
+def test_dogma_applies_multiple_dogma_effects_in_order() -> None:
+    calls: list[str] = []
+
+    def first_effect(state: GameState, player_index: int) -> GameState:
+        calls.append("first")
+        return state
+
+    def second_effect(state: GameState, player_index: int) -> GameState:
+        calls.append("second")
+        return state
+
+    active_card = _card_with_dogmas(
+        "TwoEffects",
+        Dogma(text="First.", icon=Icon.CROWN, effect=first_effect),
+        Dogma(text="Second.", icon=Icon.LEAF, effect=second_effect),
+    )
+    player = PlayerState(name="Ada", board={Color.RED: Pile(cards=(active_card,))})
+    state = GameState(players=(player,))
+
+    dogma(state, player_index=0, card_name="TwoEffects")
+
+    assert calls == ["first", "second"]
+
+
+def test_dogma_raises_for_a_card_not_on_the_board() -> None:
+    state = GameState(players=(PlayerState(name="Ada"),))
+
+    with pytest.raises(ValueError, match="Sailing"):
+        dogma(state, player_index=0, card_name="Sailing")
+
+
+def test_dogma_raises_for_a_card_not_on_top_of_its_pile() -> None:
+    covered = _card("Covered", color=Color.RED)
+    top = _card("Top", color=Color.RED)
+    player = PlayerState(name="Ada", board={Color.RED: Pile(cards=(top, covered))})
+    state = GameState(players=(player,))
+
+    with pytest.raises(ValueError, match="Covered"):
+        dogma(state, player_index=0, card_name="Covered")
+
+
+def test_dogma_raises_not_implemented_for_a_dogma_without_an_effect() -> None:
+    active_card = _card_with_dogmas(
+        "NoEffectYet", Dogma(text="Some text, no behavior yet.", icon=Icon.CROWN)
+    )
+    player = PlayerState(name="Ada", board={Color.RED: Pile(cards=(active_card,))})
+    state = GameState(players=(player,))
+
+    with pytest.raises(NotImplementedError, match="NoEffectYet"):
+        dogma(state, player_index=0, card_name="NoEffectYet")

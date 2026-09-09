@@ -6,8 +6,8 @@ Most also return the ``Card`` the action was about, since the caller
 usually needs to know which card was drawn/melded/tucked and re-deriving
 that from the new state alone would be more awkward than useful.
 
-TODO: Implement Achieve and Dogma against ``GameState``/``PlayerState``.
-See docs/rules/actions.md for the rules each function must satisfy.
+TODO: Implement Achieve against ``GameState``/``PlayerState``. See
+docs/rules/actions.md for the rules each function must satisfy.
 """
 
 from __future__ import annotations
@@ -50,7 +50,7 @@ def draw(state: GameState, player_index: int, age: int) -> tuple[GameState, Card
     return _with_player(state, player_index, new_player), card
 
 
-def draw_and_meld(state: GameState, player_index: int, age: int) -> tuple[GameState, Card]:
+def draw_and_meld(state: GameState, player_index: int, *, age: int) -> tuple[GameState, Card]:
     """The given player draws a card of the given age and melds it directly.
 
     Same age-fallback as ``draw``, but the drawn card goes straight
@@ -63,7 +63,7 @@ def draw_and_meld(state: GameState, player_index: int, age: int) -> tuple[GameSt
     return _with_player(state, player_index, new_player), card
 
 
-def draw_and_tuck(state: GameState, player_index: int, age: int) -> tuple[GameState, Card]:
+def draw_and_tuck(state: GameState, player_index: int, *, age: int) -> tuple[GameState, Card]:
     """The given player draws a card of the given age and tucks it directly.
 
     Same age-fallback as ``draw``, but the drawn card goes straight
@@ -151,6 +151,26 @@ def achieve(state: GameState, player_index: int, age: int) -> None:
     raise NotImplementedError
 
 
-def dogma(state: GameState, player_index: int, card_name: str) -> None:
-    """The active player activates the dogma effects of a melded card."""
-    raise NotImplementedError
+def dogma(state: GameState, player_index: int, card_name: str) -> GameState:
+    """The given player activates the dogma effects of a named card.
+
+    The card must be the top card of one of the player's piles (a
+    covered card's dogma can't be activated). Each of the card's
+    dogma effects runs in order, for this player only.
+
+    TODO: sharing/demanding other players in this effect isn't
+    implemented yet -- see docs/rules/actions.md.
+    """
+    card = _require_top_card(state.players[player_index], card_name)
+    for card_dogma in card.dogmas:
+        if card_dogma.effect is None:
+            raise NotImplementedError(f"{card_name!r} has no dogma effect implementation yet")
+        state = card_dogma.effect(state, player_index)
+    return state
+
+
+def _require_top_card(player: PlayerState, card_name: str) -> Card:
+    for pile in player.board.values():
+        if pile.cards and pile.cards[0].name == card_name:
+            return pile.cards[0]
+    raise ValueError(f"player {player.name!r} has no {card_name!r} on top of a pile")

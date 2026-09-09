@@ -2,20 +2,46 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from innovation.model.enums import Color, Icon
+
+if TYPE_CHECKING:
+    from innovation.model.game_state import GameState
+
+DogmaEffect = Callable[["GameState", int], "GameState"]
+"""Given the game state and the index of the player currently eligible
+for this portion of a dogma effect, returns the new state after
+applying it. Built from primitives in ``innovation.engine.actions``
+and stored alongside the card's data in ``innovation.cards.registry``
+-- see docs/architecture.md.
+"""
 
 
 @dataclass(frozen=True)
 class Dogma:
     """A single dogma effect printed on a card.
 
-    TODO: Replace the raw-text placeholder with a structured effect
-    once the action/effect system in ``innovation.engine`` is designed.
+    ``text`` is the effect's rules text, present as soon as a card's
+    data is entered. ``icon`` is the icon type this dogma is printed
+    under, which will determine share/demand eligibility once that's
+    implemented (see docs/rules/actions.md) -- it's inert data for now.
+    ``effect`` is the executable behavior and is ``None`` until it's
+    been implemented -- entering a card's data and implementing its
+    dogma effects are deliberately separate steps (see
+    docs/rules/cards.md).
+
+    TODO: sharing/demanding (other players benefiting from or being
+    forced to suffer part of the effect) isn't modeled yet -- ``effect``
+    only covers what happens for one eligible player at a time. See
+    docs/rules/actions.md.
     """
 
     text: str
+    icon: Icon
+    effect: DogmaEffect | None = None
 
 
 @dataclass(frozen=True)

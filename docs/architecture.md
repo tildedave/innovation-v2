@@ -5,24 +5,23 @@
 ```
 src/innovation/
     model/       plain-data types: Card, PlayerState, GameState
-    cards/       canonical Card definitions (the "card database")
-    engine/      rules enforcement: actions and the turn loop
+    cards/       canonical Card definitions, including dogma effects
+    engine/      rules enforcement: primitive actions and the turn loop
 ```
 
 ## Design principle: data model vs. rules engine
 
 `innovation.model` only defines *shapes* -- `Card`, `PlayerState`,
 `GameState` -- and every one of them is frozen (immutable). Nothing in
-that package enforces a rule or produces a new state on its own.
-`innovation.engine` is the only package that should apply rules, and
-it does so by returning a *new* state rather than mutating the one
-it's given (e.g. `engine.actions.meld` takes a `GameState` and returns
-a new one with the card moved, leaving the original untouched).
+that package enforces a rule or produces a new state on its own. Every
+*primitive* state transition (drawing, melding, tucking, splaying,
+activating a card's dogma effects, ...) lives in `innovation.engine`
+and works by returning a *new* state rather than mutating the one it's
+given (e.g. `engine.actions.meld` takes a `GameState` and returns a
+new one with the card moved, leaving the original untouched).
 
 This split exists so that:
 
-- Card data (`innovation.cards`) can be authored/tested independently
-  of rules logic.
 - The rules engine can be tested against hand-built `GameState`
   fixtures without going through a full game setup.
 - A future interface (CLI, web, etc.) only needs to depend on
@@ -31,17 +30,21 @@ This split exists so that:
   algorithms (minimax, MCTS, etc.) need to branch and backtrack over
   possible games without deep-copying state or writing undo logic.
 
-## Cards are data, dogma effects are code
+## Cards are data plus their dogma effects, colocated
 
 A `Card` (see [card.py](../src/innovation/model/card.py)) is an
-immutable definition: name, age, color, icons, and its dogma text.
-Card *identity* and *printed text* belong in `innovation.cards`.
-What a dogma effect actually *does* is executable behavior and belongs
-in `innovation.engine` -- the two are being kept decoupled from the
-start so that adding a card's rules text (data) and implementing what
-it does (code) can be separate, individually testable steps. How that
-executable behavior is represented (e.g. one function per card, a
-small effect-description DSL) is not yet decided.
+immutable definition: name, age, color, icons, and its `Dogma`s (each
+carrying its rules text, its governing icon, and -- once implemented
+-- an executable `effect`). A card's full definition, data and
+behavior together, lives in one place in `innovation.cards.registry`
+(e.g. `SAILING`'s dogma effect is `_sailing_dogma`, defined right next
+to it), rather than being split across packages: a card and what it
+does are one unit of work to add. Effects are *built from* primitives
+in `innovation.engine.actions` (e.g. `draw_and_meld`) -- the primitive
+state transitions themselves still only live in `innovation.engine`,
+`innovation.cards` just composes them per card. Entering a card's data
+and implementing its effect(s) can still be done as separate steps:
+`Dogma.effect` is `None` until written (see docs/rules/cards.md).
 
 ## Out of scope for now
 

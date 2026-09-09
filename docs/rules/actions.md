@@ -47,15 +47,29 @@ function in
 
 ## Dogma
 
-- Resolution order when a card has multiple effects.
-- The share/demand distinction: when non-active players participate
-  "for free" (share) vs. only if they meet an icon-count threshold
-  (demand), and what the active player's icon count controls.
-- The "I" rule for repeating an effect once per matching icon --
-  confirm and state precisely once found in the rulebook.
-- What "flow of the game" cards vs. combat/attack-style cards commonly
-  do differently, if that distinction matters for how effects are
-  implemented.
+- Implemented for a single (non-shared, non-demanded) player
+  (`engine/actions.dogma`): the named card must be the top card of one
+  of the acting player's piles; each of its `Dogma.effect`s (see
+  `innovation.model.card.DogmaEffect`) runs in order against the game
+  state, for that player only. Raises `NotImplementedError` if a
+  `Dogma` has no `effect` implemented yet (data entered, behavior not
+  written -- see docs/rules/cards.md), and `ValueError` if the named
+  card isn't on top of one of the player's piles.
+- Each `Dogma` also carries an `icon` (the icon type it's printed
+  under on the card), which will determine share/demand eligibility --
+  it's stored now but not yet consulted by `dogma`.
+- TODO: The share/demand distinction: when non-active players
+  participate "for free" (share) vs. only if they meet an icon-count
+  threshold (demand), and what the active player's icon count
+  controls. Not modeled at all yet -- every effect currently only runs
+  for the acting player passed to `dogma`.
+- TODO: The "I" rule for repeating an effect once per matching icon --
+  confirm and state precisely once found in the rulebook. (Note:
+  Sailing does *not* use this pattern -- its dogma is a flat "draw and
+  meld a 1," not repeated per icon.)
+- TODO: What "flow of the game" cards vs. combat/attack-style cards
+  commonly do differently, if that distinction matters for how effects
+  are implemented.
 
 ## Cross-cutting: per-card dogma effects
 
