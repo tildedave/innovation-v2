@@ -3,17 +3,23 @@
 import pytest
 
 from innovation.cards.registry import (
+    AGRICULTURE,
     METALWORKING,
     SAILING,
     _metalworking_dogma,
     all_cards,
     cards_of_age,
 )
-from innovation.engine.actions import SupplyExhaustedError, dogma
+from innovation.engine.actions import (
+    SupplyExhaustedError,
+    answer_optional,
+    dogma,
+    pending_decision,
+)
 from innovation.model.card import Card, CardIcons
 from innovation.model.enums import Color, Icon
 from innovation.model.game_state import GameState
-from innovation.model.pending import EffectStep
+from innovation.model.pending import EffectStep, OptionalStep
 from innovation.model.pile import Pile
 from innovation.model.player import PlayerState
 
@@ -89,8 +95,8 @@ def test_metalworking_has_one_castle_dogma_with_an_implemented_effect() -> None:
 
 
 def test_all_cards_and_cards_of_age_include_every_registered_card() -> None:
-    assert all_cards() == [SAILING, METALWORKING]
-    assert cards_of_age(1) == [SAILING, METALWORKING]
+    assert all_cards() == [SAILING, METALWORKING, AGRICULTURE]
+    assert cards_of_age(1) == [SAILING, METALWORKING, AGRICULTURE]
     assert cards_of_age(2) == []
 
 
@@ -172,3 +178,93 @@ def test_metalworkings_dogma_effect_does_not_requeue_when_it_does_not_score() ->
     new_state = _metalworking_dogma(state, player_index=0)
 
     assert new_state.pending_steps == ()
+
+
+def test_agriculture_is_a_yellow_age_one_card() -> None:
+    assert AGRICULTURE.age == 1
+    assert AGRICULTURE.color == Color.YELLOW
+
+
+def test_agriculture_icons() -> None:
+    assert AGRICULTURE.icons.top_left == Icon.NONE
+    assert AGRICULTURE.icons.bottom_left == Icon.LEAF
+    assert AGRICULTURE.icons.bottom_center == Icon.LEAF
+    assert AGRICULTURE.icons.bottom_right == Icon.LEAF
+
+
+def test_agriculture_has_one_leaf_dogma_with_an_implemented_effect() -> None:
+    assert len(AGRICULTURE.dogmas) == 1
+    assert AGRICULTURE.dogmas[0].icon == Icon.LEAF
+    assert AGRICULTURE.dogmas[0].effect is not None
+
+
+def test_agricultures_dogma_pauses_on_a_return_decision() -> None:
+    player = PlayerState(name="Ada", board={Color.YELLOW: Pile(cards=(AGRICULTURE,))})
+    state = GameState(players=(player,))
+
+    new_state = dogma(state, player_index=0, card_name="Agriculture")
+
+    decision = pending_decision(new_state)
+    assert isinstance(decision, OptionalStep)
+    assert decision.player_index == 0
+    assert decision.card_name == "Agriculture"
+
+
+def test_agricultures_dogma_declining_does_nothing_further() -> None:
+    hand_card = _card("KeepMe", age=2)
+    bonus_card = _card("Bonus", age=3)
+    player = PlayerState(
+        name="Ada", hand=(hand_card,), board={Color.YELLOW: Pile(cards=(AGRICULTURE,))}
+    )
+    state = GameState(players=(player,), supply={2: (), 3: (bonus_card,)})
+
+    state = dogma(state, player_index=0, card_name="Agriculture")
+    state = answer_optional(state, card_name=None)
+
+    assert state.players[0].hand == (hand_card,)
+    assert state.players[0].score_pile == ()
+    assert state.supply[3] == (bonus_card,)
+    assert pending_decision(state) is None
+    assert state.pending_steps == ()
+
+
+def test_agricultures_dogma_returning_a_card_draws_and_scores_one_higher() -> None:
+    returned_card = _card("ReturnMe", age=2)
+    bonus_card = _card("Bonus", age=3)
+    player = PlayerState(
+        name="Ada", hand=(returned_card,), board={Color.YELLOW: Pile(cards=(AGRICULTURE,))}
+    )
+    state = GameState(players=(player,), supply={2: (), 3: (bonus_card,)})
+
+    state = dogma(state, player_index=0, card_name="Agriculture")
+    state = answer_optional(state, card_name="ReturnMe")
+
+    assert state.players[0].hand == ()
+    assert state.players[0].score_pile == (bonus_card,)
+    assert state.supply[2] == (returned_card,)
+    assert state.supply[3] == ()
+    assert pending_decision(state) is None
+
+
+def test_agricultures_dogma_scales_the_draw_age_with_the_returned_cards_age() -> None:
+    returned_card = _card("ReturnMe", age=5)
+    bonus_card = _card("Bonus", age=6)
+    player = PlayerState(
+        name="Ada", hand=(returned_card,), board={Color.YELLOW: Pile(cards=(AGRICULTURE,))}
+    )
+    state = GameState(players=(player,), supply={5: (), 6: (bonus_card,)})
+
+    state = dogma(state, player_index=0, card_name="Agriculture")
+    state = answer_optional(state, card_name="ReturnMe")
+
+    assert state.players[0].score_pile == (bonus_card,)
+
+
+def test_agricultures_dogma_return_raises_for_a_card_not_in_hand() -> None:
+    player = PlayerState(name="Ada", board={Color.YELLOW: Pile(cards=(AGRICULTURE,))})
+    state = GameState(players=(player,))
+
+    state = dogma(state, player_index=0, card_name="Agriculture")
+
+    with pytest.raises(ValueError, match="NotInHand"):
+        answer_optional(state, card_name="NotInHand")

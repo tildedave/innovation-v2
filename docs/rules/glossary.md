@@ -10,6 +10,7 @@ the corresponding rule gets implemented -- precise wording belongs in
 | Age | One of the ten eras a card belongs to, roughly corresponding to its deck/difficulty tier. | Confirm age numbering and deck sizes. |
 | Meld | Play a card from hand face-up onto your board, on top of its color's pile. | -- |
 | Tuck | Place a card at the *bottom* of a color pile instead of melding it on top. | Confirm which effects cause tucking vs. melding. |
+| Return | Move a card from hand to the *bottom* of its own age's supply pile, not revealed. Implemented as `engine/actions.return_card`. Often phrased "you may return a card... if you do, ..." -- an optional action by the active player, see `model/pending.OptionalStep`. | -- |
 | Splay | Shift a color pile so cards underneath the top card are partially visible, exposing their icons. Splay left exposes the bottom-right icon of each covered card; splay right exposes the top-left and bottom-left icons; splay up exposes every icon except top-left (bottom-left, bottom-center, bottom-right). All confirmed; see `engine/board.py`. | -- |
 | Score | Move a card to your score pile (face down/counted, not part of your visible board). Implemented as `engine/actions.score` (from hand). | Confirm how score-pile value is computed. |
 | Draw | Take the top card of a given age from the supply into your hand. | -- |

@@ -39,6 +39,11 @@ function in
   reveal" dogma effects (e.g. Metalworking) so the act of showing a
   card to the table has an explicit call site, even though nothing
   currently tracks "the revealed card" in `GameState`.
+- Return (`engine/actions.return_card`) moves a named card from hand
+  to the *bottom* of its own age's supply pile (the end `draw` doesn't
+  take from) -- not revealed. Used by "return" dogma effects (e.g.
+  Agriculture). See "Optional actions within an effect" below for how
+  a card decides *whether* to return one.
 - Splaying: what it is, the four directions, and which icons become
   visible/countable as a result. (See [glossary.md](glossary.md).)
   Splay left (`engine/board.splay_left`) exposes the bottom-right icon
@@ -80,13 +85,15 @@ function in
   queue of what's left to resolve. `dogma` builds it as
   `[ShareStep, ShareStep, ..., EffectStep]` (one `ShareStep` per
   eligible player in turn order, then the active player's own
-  `EffectStep`) and auto-runs any `EffectStep`s at the front (no
-  decision needed) until it hits a `ShareStep` or empties the queue.
-  `pending_decision(state)` returns the `ShareStep` currently awaiting
-  an answer (`None` if nothing's pending), and
-  `answer_share(state, share)` resolves it -- running that player's
-  copy of the effect first if `share` is `True` -- then advances the
-  queue the same way. When nobody is eligible, the queue is just
+  `EffectStep`) and auto-runs any `EffectStep`s (or `DrawHighestStep`s)
+  at the front (no decision needed) until it hits a step that needs
+  one or empties the queue. `pending_decision(state)` returns whatever
+  decision-requiring step is currently at the front (a `ShareStep` or
+  `OptionalStep`; `None` if nothing's pending), and
+  `answer_share(state, share)` resolves a pending `ShareStep` --
+  running that player's copy of the effect first if `share` is `True`
+  -- then advances the queue the same way (it raises if the pending
+  step isn't a `ShareStep`). When nobody is eligible, the queue is just
   `[EffectStep]` and it all resolves inside the original `dogma` call,
   same as before sharing existed.
 - Confirmed: if *any* player shares (the first "yes" for a given dogma
@@ -102,6 +109,37 @@ function in
   (i.e. fewer-icon) player to suffer part of the effect instead -- has
   no eligibility query or step type yet, symmetric to
   `eligible_to_share`/`ShareStep` but with the comparison flipped.
+
+### Optional actions within an effect
+
+- The "you may X a card from your hand. If you do, Y. If you don't,
+  Z." pattern (e.g. Agriculture: "you may return a card from your
+  hand. If you do, draw and score a card of value one higher than the
+  card you return") is a decision by the *active* player, not other
+  players -- modeled similarly to sharing, via a queued step and an
+  `answer_*` function, but kept as a separate step type
+  (`OptionalStep`, see `innovation.model.pending`) rather than reusing
+  `ShareStep`: sharing has its own ramifications (the bonus-draw rule
+  above) that don't apply to an ordinary optional action.
+- `OptionalStep` generalizes over *which* action is optional: its
+  `action` field is any `CardAction` -- a function shaped like
+  `engine.actions.meld`/`tuck`/`score`/`return_card`, i.e. `(state,
+  player_index, card_name) -> (state, Card)` -- so a future "you may
+  meld/tuck/score a card..." effect reuses this same step type with a
+  different `action`, not a new one. Agriculture's is `return_card`.
+  `if_done` runs afterward with the resulting card; `if_declined` runs
+  instead if they decline (a no-op if `None` -- Agriculture has no "if
+  you don't"). `answer_optional(state, card_name)` resolves it --
+  `card_name=None` means decline, matching `answer_share`'s pattern of
+  "raise if the pending step isn't this type."
+- `OptionalStep.validate`, if set, is a `CardChoiceValidator` that
+  `answer_optional` calls *before* `action` when a card is chosen --
+  it can reject an otherwise-in-hand card that isn't legal for that
+  specific decision (beyond "is it in hand," which `action` already
+  checks), by raising `ValueError`. Not called on decline. Agriculture
+  leaves it `None` since "any card in hand" is already a fully legal
+  choice; it exists for a future card with a real constraint (e.g. "a
+  card of a color you don't have").
 - TODO: The "I" rule for repeating an effect once per matching icon --
   confirm and state precisely once found in the rulebook. (Note:
   Sailing does *not* use this pattern -- its dogma is a flat "draw and

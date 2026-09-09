@@ -18,7 +18,13 @@ from innovation.engine.sharing import eligible_to_share
 from innovation.model.card import Card
 from innovation.model.enums import Zone
 from innovation.model.game_state import GameState
-from innovation.model.pending import DrawHighestStep, EffectStep, PendingStep, ShareStep
+from innovation.model.pending import (
+    DrawHighestStep,
+    EffectStep,
+    OptionalStep,
+    PendingStep,
+    ShareStep,
+)
 from innovation.model.pile import Pile
 from innovation.model.player import PlayerState
 
@@ -148,6 +154,21 @@ def score(state: GameState, player_index: int, card_name: str) -> tuple[GameStat
     return _with_player(state, player_index, new_player), card
 
 
+def return_card(state: GameState, player_index: int, card_name: str) -> tuple[GameState, Card]:
+    """The given player returns a named card from their hand to the
+    bottom of its own age's supply pile.
+
+    The card is removed from hand and appended to the end of
+    ``state.supply[card.age]`` -- the bottom of that age's deck,
+    opposite the end ``draw`` takes from. Not revealed.
+    """
+    player, card = _take_from_hand(state.players[player_index], card_name)
+    state = _with_player(state, player_index, player)
+    new_supply = dict(state.supply)
+    new_supply[card.age] = (*new_supply.get(card.age, ()), card)
+    return replace(state, supply=new_supply), card
+
+
 def _with_player(state: GameState, player_index: int, player: PlayerState) -> GameState:
     new_players = list(state.players)
     new_players[player_index] = player
@@ -218,9 +239,13 @@ def dogma(state: GameState, player_index: int, card_name: str) -> GameState:
     return _advance(state)
 
 
-def pending_decision(state: GameState) -> ShareStep | None:
-    """Return the share decision currently awaiting an answer, if any."""
-    if state.pending_steps and isinstance(state.pending_steps[0], ShareStep):
+def pending_decision(state: GameState) -> ShareStep | OptionalStep | None:
+    """Return the decision currently awaiting an answer, if any.
+
+    A ``ShareStep`` (see ``answer_share``) or ``OptionalStep`` (see
+    ``answer_optional``); ``None`` if nothing needs a decision right now.
+    """
+    if state.pending_steps and isinstance(state.pending_steps[0], ShareStep | OptionalStep):
         return state.pending_steps[0]
     return None
 
@@ -236,12 +261,38 @@ def answer_share(state: GameState, share: bool) -> GameState:
     Raises ``ValueError`` if no share decision is pending.
     """
     step = pending_decision(state)
-    if step is None:
+    if not isinstance(step, ShareStep):
         raise ValueError("no pending share decision to answer")
     state = replace(state, pending_steps=state.pending_steps[1:])
     if share:
         state = step.effect(state, step.player_index)
         state = _queue_share_bonus_draw(state, step.active_player_index)
+    return _advance(state)
+
+
+def answer_optional(state: GameState, card_name: str | None) -> GameState:
+    """Resolve the pending optional-action decision (see ``pending_decision``).
+
+    Pass the name of the card to act on, or ``None`` to decline. If a
+    name is given and the step has a ``validate`` (see ``OptionalStep``),
+    it runs first and can reject the choice with a ``ValueError``
+    before anything else happens; otherwise (or if there's no
+    ``validate``) the step's ``action`` runs on it and then ``if_done``
+    runs with the resulting card. If ``None``, ``if_declined`` runs
+    instead (if it's set). Raises ``ValueError`` if no optional
+    decision is pending.
+    """
+    step = pending_decision(state)
+    if not isinstance(step, OptionalStep):
+        raise ValueError("no pending optional decision to answer")
+    state = replace(state, pending_steps=state.pending_steps[1:])
+    if card_name is not None:
+        if step.validate is not None:
+            step.validate(state, step.player_index, card_name)
+        state, acted_on_card = step.action(state, step.player_index, card_name)
+        state = step.if_done(state, step.player_index, acted_on_card)
+    elif step.if_declined is not None:
+        state = step.if_declined(state, step.player_index)
     return _advance(state)
 
 

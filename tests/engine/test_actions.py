@@ -4,6 +4,7 @@ import pytest
 
 from innovation.engine.actions import (
     SupplyExhaustedError,
+    answer_optional,
     answer_share,
     dogma,
     draw,
@@ -11,6 +12,7 @@ from innovation.engine.actions import (
     draw_and_tuck,
     meld,
     pending_decision,
+    return_card,
     reveal,
     score,
     tuck,
@@ -18,6 +20,7 @@ from innovation.engine.actions import (
 from innovation.model.card import Card, CardIcons, Dogma
 from innovation.model.enums import Color, Icon, Splay, Zone
 from innovation.model.game_state import GameState
+from innovation.model.pending import OptionalStep, ShareStep
 from innovation.model.pile import Pile
 from innovation.model.player import PlayerState
 
@@ -362,6 +365,66 @@ def test_score_raises_for_a_card_not_in_hand() -> None:
         score(state, player_index=0, card_name="Currency")
 
 
+def test_return_card_moves_the_card_from_hand_to_the_bottom_of_its_age_supply_pile() -> None:
+    card = _card("Pottery", age=2)
+    state = GameState(players=(PlayerState(name="Ada", hand=(card,)),), supply={2: ()})
+
+    new_state, returned = return_card(state, player_index=0, card_name="Pottery")
+
+    assert returned is card
+    assert new_state.players[0].hand == ()
+    assert new_state.supply[2] == (card,)
+
+
+def test_return_card_does_not_modify_the_original_state() -> None:
+    card = _card("Pottery", age=2)
+    state = GameState(players=(PlayerState(name="Ada", hand=(card,)),), supply={2: ()})
+
+    return_card(state, player_index=0, card_name="Pottery")
+
+    assert state.players[0].hand == (card,)
+    assert state.supply[2] == ()
+
+
+def test_return_card_appends_after_existing_cards_of_that_age() -> None:
+    already_there = _card("AlreadyThere", age=2)
+    returned_card = _card("Returned", age=2)
+    player = PlayerState(name="Ada", hand=(returned_card,))
+    state = GameState(players=(player,), supply={2: (already_there,)})
+
+    new_state, _ = return_card(state, player_index=0, card_name="Returned")
+
+    assert new_state.supply[2] == (already_there, returned_card)
+
+
+def test_return_card_creates_a_new_supply_entry_if_none_existed_for_that_age() -> None:
+    card = _card("Pottery", age=3)
+    state = GameState(players=(PlayerState(name="Ada", hand=(card,)),))
+
+    new_state, _ = return_card(state, player_index=0, card_name="Pottery")
+
+    assert new_state.supply[3] == (card,)
+
+
+def test_return_card_removes_only_the_named_card_from_hand() -> None:
+    keep = _card("Keep")
+    returned_card = _card("Return")
+    player = PlayerState(name="Ada", hand=(keep, returned_card))
+    state = GameState(players=(player,), supply={1: ()})
+
+    new_state, _ = return_card(state, player_index=0, card_name="Return")
+
+    assert new_state.players[0].hand == (keep,)
+
+
+def test_return_card_raises_for_a_card_not_in_hand() -> None:
+    player = PlayerState(name="Ada", hand=(_card("Pottery"),))
+    state = GameState(players=(player,))
+
+    with pytest.raises(ValueError, match="Currency"):
+        return_card(state, player_index=0, card_name="Currency")
+
+
 @pytest.mark.parametrize("zone", list(Zone))
 def test_reveal_is_a_no_op_regardless_of_zone(zone: Zone) -> None:
     card = _card("Pottery")
@@ -563,6 +626,122 @@ def test_answer_share_raises_when_nothing_is_pending() -> None:
 
     with pytest.raises(ValueError, match="no pending share decision"):
         answer_share(state, share=True)
+
+
+def test_answer_optional_raises_when_nothing_is_pending() -> None:
+    state = GameState(players=(PlayerState(name="Ada"),))
+
+    with pytest.raises(ValueError, match="no pending optional decision"):
+        answer_optional(state, card_name=None)
+
+
+def test_answer_share_raises_when_an_optional_decision_is_pending() -> None:
+    def if_done(state: GameState, player_index: int, acted_on: Card) -> GameState:
+        return state
+
+    optional_step = OptionalStep(
+        player_index=0, card_name="Agriculture", action=return_card, if_done=if_done
+    )
+    state = GameState(players=(PlayerState(name="Ada"),), pending_steps=(optional_step,))
+
+    with pytest.raises(ValueError, match="no pending share decision"):
+        answer_share(state, share=True)
+
+
+def test_answer_optional_raises_when_a_share_decision_is_pending() -> None:
+    def effect(state: GameState, player_index: int) -> GameState:
+        return state
+
+    share_step = ShareStep(
+        player_index=0, active_player_index=0, card_name="Sailing", effect=effect
+    )
+    state = GameState(players=(PlayerState(name="Ada"),), pending_steps=(share_step,))
+
+    with pytest.raises(ValueError, match="no pending optional decision"):
+        answer_optional(state, card_name=None)
+
+
+def test_answer_optional_runs_validate_before_the_action() -> None:
+    calls: list[str] = []
+
+    def validate(state: GameState, player_index: int, card_name: str) -> None:
+        calls.append("validate")
+
+    def action(state: GameState, player_index: int, card_name: str) -> tuple[GameState, Card]:
+        calls.append("action")
+        return score(state, player_index, card_name)
+
+    def if_done(state: GameState, player_index: int, acted_on: Card) -> GameState:
+        calls.append("if_done")
+        return state
+
+    card = _card("Pottery")
+    player = PlayerState(name="Ada", hand=(card,))
+    optional_step = OptionalStep(
+        player_index=0, card_name="Test", action=action, if_done=if_done, validate=validate
+    )
+    state = GameState(players=(player,), pending_steps=(optional_step,))
+
+    answer_optional(state, card_name="Pottery")
+
+    assert calls == ["validate", "action", "if_done"]
+
+
+def test_answer_optional_rejects_an_invalid_choice_before_acting() -> None:
+    def validate(state: GameState, player_index: int, card_name: str) -> None:
+        raise ValueError(f"{card_name!r} is not a legal choice")
+
+    def action(state: GameState, player_index: int, card_name: str) -> tuple[GameState, Card]:
+        return score(state, player_index, card_name)
+
+    def if_done(state: GameState, player_index: int, acted_on: Card) -> GameState:
+        return state
+
+    card = _card("Pottery")
+    player = PlayerState(name="Ada", hand=(card,))
+    optional_step = OptionalStep(
+        player_index=0, card_name="Test", action=action, if_done=if_done, validate=validate
+    )
+    state = GameState(players=(player,), pending_steps=(optional_step,))
+
+    with pytest.raises(ValueError, match="not a legal choice"):
+        answer_optional(state, card_name="Pottery")
+
+    # Nothing happened -- the original state is untouched (raising means
+    # answer_optional never returns a new one).
+    assert pending_decision(state) is optional_step
+    assert state.players[0].hand == (card,)
+
+
+def test_answer_optional_does_not_run_validate_on_decline() -> None:
+    calls: list[str] = []
+
+    def validate(state: GameState, player_index: int, card_name: str) -> None:
+        calls.append("validate")
+
+    def action(state: GameState, player_index: int, card_name: str) -> tuple[GameState, Card]:
+        return score(state, player_index, card_name)
+
+    def if_done(state: GameState, player_index: int, acted_on: Card) -> GameState:
+        return state
+
+    def if_declined(state: GameState, player_index: int) -> GameState:
+        calls.append("declined")
+        return state
+
+    optional_step = OptionalStep(
+        player_index=0,
+        card_name="Test",
+        action=action,
+        if_done=if_done,
+        if_declined=if_declined,
+        validate=validate,
+    )
+    state = GameState(players=(PlayerState(name="Ada"),), pending_steps=(optional_step,))
+
+    answer_optional(state, card_name=None)
+
+    assert calls == ["declined"]
 
 
 def test_dogma_full_sharing_flow_matches_turn_order_and_resolves_in_order() -> None:

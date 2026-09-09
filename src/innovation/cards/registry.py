@@ -14,11 +14,11 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from innovation.engine.actions import draw, draw_and_meld, reveal, score
+from innovation.engine.actions import draw, draw_and_meld, return_card, reveal, score
 from innovation.model.card import Card, CardIcons, Dogma
 from innovation.model.enums import Color, Icon, Zone
 from innovation.model.game_state import GameState
-from innovation.model.pending import EffectStep
+from innovation.model.pending import EffectStep, OptionalStep
 
 
 def _sailing_dogma(state: GameState, player_index: int) -> GameState:
@@ -82,7 +82,52 @@ METALWORKING = Card(
     ),
 )
 
-CARDS_BY_NAME: dict[str, Card] = {card.name: card for card in [SAILING, METALWORKING]}
+
+def _agriculture_dogma(state: GameState, player_index: int) -> GameState:
+    """Agriculture's dogma: you may return a card from your hand. If
+    you do, draw and score a card of value one higher than the card
+    you return.
+    """
+    optional_step = OptionalStep(
+        player_index=player_index,
+        card_name="Agriculture",
+        action=return_card,
+        if_done=_agriculture_after_return,
+    )
+    return replace(state, pending_steps=(*state.pending_steps, optional_step))
+
+
+def _agriculture_after_return(
+    state: GameState, player_index: int, returned_card: Card
+) -> GameState:
+    state, drawn = draw(state, player_index, age=returned_card.age + 1)
+    state, _ = score(state, player_index, drawn.name)
+    return state
+
+
+AGRICULTURE = Card(
+    name="Agriculture",
+    age=1,
+    color=Color.YELLOW,
+    icons=CardIcons(
+        top_left=Icon.NONE,
+        bottom_left=Icon.LEAF,
+        bottom_center=Icon.LEAF,
+        bottom_right=Icon.LEAF,
+    ),
+    dogmas=(
+        Dogma(
+            text=(
+                "You may return a card from your hand. If you do, draw and score a "
+                "card of value one higher than the card you return."
+            ),
+            icon=Icon.LEAF,
+            effect=_agriculture_dogma,
+        ),
+    ),
+)
+
+CARDS_BY_NAME: dict[str, Card] = {card.name: card for card in [SAILING, METALWORKING, AGRICULTURE]}
 
 
 def all_cards() -> list[Card]:
