@@ -7,9 +7,16 @@ function in
 
 ## Draw
 
-- Which age a player draws from (their current lowest available, vs.
-  highest melded, etc.) and what happens when that age's supply is
-  empty.
+- The primitive (`engine/actions.draw`) is implemented: draw a card of
+  a given age, falling back to the next higher age if that pile is
+  empty, up through age 10; raises `SupplyExhaustedError` if nothing
+  is available at or above the requested age.
+- TODO: which age the base turn "Draw" action passes in -- the player's
+  current highest melded age, most likely -- isn't determined yet
+  since it needs `meld`/board state.
+- TODO: what actually happens when `SupplyExhaustedError` is raised
+  (an end-of-game trigger per the rulebook) isn't handled yet; that
+  belongs in the turn loop (`engine/game.py`), not in `draw` itself.
 
 ## Meld
 
