@@ -23,12 +23,17 @@ class ShareStep:
     """The game is waiting on ``player_index`` to decide whether to share.
 
     If they choose to share, ``effect`` runs for them (for free, at no
-    cost to their own turn) before the next step in the queue runs.
+    cost to their own turn) before the next step in the queue runs, and
+    (if this is the first "yes" for this dogma activation) a
+    ``DrawHighestStep`` for ``active_player_index`` is queued at the
+    end -- see ``DrawHighestStep``. ``active_player_index`` is who
+    activated the dogma (not who's being asked to share).
     ``card_name`` is carried along for display purposes (e.g. "Ask
     Player 3 if they want to share in Sailing?").
     """
 
     player_index: int
+    active_player_index: int
     card_name: str
     effect: DogmaEffect
 
@@ -41,4 +46,17 @@ class EffectStep:
     effect: DogmaEffect
 
 
-PendingStep = ShareStep | EffectStep
+@dataclass(frozen=True)
+class DrawHighestStep:
+    """Run automatically: ``player_index`` draws a card of their
+    highest top-card age.
+
+    Queued (once, at most, per dogma activation) the first time any
+    other player shares one of that activation's effects -- see
+    ``ShareStep`` and ``innovation.engine.actions.answer_share``.
+    """
+
+    player_index: int
+
+
+PendingStep = ShareStep | EffectStep | DrawHighestStep

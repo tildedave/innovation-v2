@@ -17,7 +17,7 @@ from dataclasses import replace
 from innovation.engine.sharing import eligible_to_share
 from innovation.model.card import Card
 from innovation.model.game_state import GameState
-from innovation.model.pending import EffectStep, PendingStep, ShareStep
+from innovation.model.pending import DrawHighestStep, EffectStep, PendingStep, ShareStep
 from innovation.model.pile import Pile
 from innovation.model.player import PlayerState
 
@@ -177,7 +177,12 @@ def dogma(state: GameState, player_index: int, card_name: str) -> GameState:
             raise NotImplementedError(f"{card_name!r} has no dogma effect implementation yet")
         sharers = eligible_to_share(state, player_index, card_dogma.icon)
         new_steps.extend(
-            ShareStep(player_index=sharer, card_name=card_name, effect=card_dogma.effect)
+            ShareStep(
+                player_index=sharer,
+                active_player_index=player_index,
+                card_name=card_name,
+                effect=card_dogma.effect,
+            )
             for sharer in sharers
         )
         new_steps.append(EffectStep(player_index=player_index, effect=card_dogma.effect))
@@ -196,7 +201,10 @@ def answer_share(state: GameState, share: bool) -> GameState:
     """Resolve the pending share decision (see ``pending_decision``).
 
     If ``share`` is True, the eligible player's copy of the effect
-    runs (for free) before the queue advances; if False, it's skipped.
+    runs (for free) before the queue advances, and -- the first time
+    this happens for the current dogma activation -- a
+    ``DrawHighestStep`` for the active player is queued at the end
+    (see ``DrawHighestStep``). If ``share`` is False, both are skipped.
     Raises ``ValueError`` if no share decision is pending.
     """
     step = pending_decision(state)
@@ -205,16 +213,35 @@ def answer_share(state: GameState, share: bool) -> GameState:
     state = replace(state, pending_steps=state.pending_steps[1:])
     if share:
         state = step.effect(state, step.player_index)
+        state = _queue_share_bonus_draw(state, step.active_player_index)
     return _advance(state)
 
 
+def _queue_share_bonus_draw(state: GameState, active_player_index: int) -> GameState:
+    already_queued = any(isinstance(step, DrawHighestStep) for step in state.pending_steps)
+    if already_queued:
+        return state
+    bonus_step = DrawHighestStep(player_index=active_player_index)
+    return replace(state, pending_steps=(*state.pending_steps, bonus_step))
+
+
 def _advance(state: GameState) -> GameState:
-    """Run leading ``EffectStep``s until the queue is empty or hits a ``ShareStep``."""
-    while state.pending_steps and isinstance(state.pending_steps[0], EffectStep):
+    """Run leading no-decision steps until the queue empties or hits a ``ShareStep``."""
+    while state.pending_steps and isinstance(state.pending_steps[0], EffectStep | DrawHighestStep):
         step = state.pending_steps[0]
         state = replace(state, pending_steps=state.pending_steps[1:])
-        state = step.effect(state, step.player_index)
+        if isinstance(step, DrawHighestStep):
+            state = _draw_highest(state, step.player_index)
+        else:
+            state = step.effect(state, step.player_index)
     return state
+
+
+def _draw_highest(state: GameState, player_index: int) -> GameState:
+    player = state.players[player_index]
+    highest_age = max(pile.cards[0].age for pile in player.board.values() if pile.cards)
+    new_state, _ = draw(state, player_index, age=highest_age)
+    return new_state
 
 
 def _require_top_card(player: PlayerState, card_name: str) -> Card:

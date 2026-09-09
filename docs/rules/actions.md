@@ -81,6 +81,15 @@ function in
   queue the same way. When nobody is eligible, the queue is just
   `[EffectStep]` and it all resolves inside the original `dogma` call,
   same as before sharing existed.
+- Confirmed: if *any* player shares (the first "yes" for a given dogma
+  activation, regardless of how many eventually share), the active
+  player draws a bonus card of their own highest top-card age -- once
+  per activation, not once per sharer. Implemented as a
+  `DrawHighestStep` (see `innovation.model.pending`), queued by
+  `answer_share` at the *end* of `pending_steps` the first time
+  `share=True` is answered (a second "yes" finds one already queued
+  and doesn't add another), and auto-run like an `EffectStep` once the
+  queue reaches it.
 - TODO: demanding -- when the active player forces a non-eligible
   (i.e. fewer-icon) player to suffer part of the effect instead -- has
   no eligibility query or step type yet, symmetric to

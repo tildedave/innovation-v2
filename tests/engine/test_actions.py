@@ -530,8 +530,8 @@ def test_dogma_full_sharing_flow_matches_turn_order_and_resolves_in_order() -> N
             Color.BLUE: _crown_pile("P3b", Color.BLUE),
         },
     )
-    card_z, card_y, card_x = _card("Z"), _card("Y"), _card("X")
-    state = GameState(players=(p0, p1, active, p3), supply={1: (card_z, card_y, card_x)})
+    card_z, card_y, card_x, card_w = _card("Z"), _card("Y"), _card("X"), _card("W")
+    state = GameState(players=(p0, p1, active, p3), supply={1: (card_z, card_y, card_x, card_w)})
 
     state = dogma(state, player_index=2, card_name="Effectful")
 
@@ -541,17 +541,86 @@ def test_dogma_full_sharing_flow_matches_turn_order_and_resolves_in_order() -> N
     assert decision.card_name == "Effectful"
 
     # Player 3 shares: draws a card, then it's Player 1's turn to decide.
+    # Sharing also queues a bonus draw for the active player, at the end.
     state = answer_share(state, share=True)
     assert state.players[3].hand == (card_z,)
     decision = pending_decision(state)
     assert decision is not None
     assert decision.player_index == 1
 
-    # Player 1 declines: no card for them, and the active player's own
-    # effect then runs automatically (no decision needed for it).
+    # Player 1 declines: no card for them. The active player's own
+    # effect then runs automatically, followed by the queued bonus draw
+    # (both need no decision) -- two cards for the active player, since
+    # their highest top-card age (1) matches the dogma's own draw age.
     state = answer_share(state, share=False)
     assert state.players[1].hand == ()
-    assert state.players[2].hand == (card_y,)
-    assert state.supply[1] == (card_x,)
+    assert state.players[2].hand == (card_y, card_x)
+    assert state.supply[1] == (card_w,)
     assert pending_decision(state) is None
     assert state.pending_steps == ()
+
+
+def _noop(state: GameState, player_index: int) -> GameState:
+    return state
+
+
+def test_a_share_queues_one_bonus_draw_at_the_active_players_highest_top_card_age() -> None:
+    low_card = _card("Low", age=1)
+    high_card = _card("High", age=3)
+    active_card = _card_with_dogmas(
+        "Effectful", Dogma(text="Do nothing.", icon=Icon.CROWN, effect=_noop)
+    )
+    active = PlayerState(
+        name="Active",
+        board={
+            Color.RED: Pile(cards=(active_card,)),
+            Color.GREEN: Pile(cards=(low_card,)),
+            Color.BLUE: Pile(cards=(high_card,)),
+        },
+    )
+    sharer = PlayerState(name="Sharer", board={Color.YELLOW: _crown_pile("Sharer", Color.YELLOW)})
+    bonus_card = _card("Bonus", age=3)
+    state = GameState(players=(active, sharer), supply={3: (bonus_card,)})
+
+    state = dogma(state, player_index=0, card_name="Effectful")
+    state = answer_share(state, share=True)
+
+    assert state.players[0].hand == (bonus_card,)
+    assert state.supply[3] == ()
+    assert pending_decision(state) is None
+    assert state.pending_steps == ()
+
+
+def test_declining_a_share_does_not_queue_a_bonus_draw() -> None:
+    active_card = _card_with_dogmas(
+        "Effectful", Dogma(text="Do nothing.", icon=Icon.CROWN, effect=_noop)
+    )
+    active = PlayerState(name="Active", board={Color.RED: Pile(cards=(active_card,))})
+    sharer = PlayerState(name="Sharer", board={Color.YELLOW: _crown_pile("Sharer", Color.YELLOW)})
+    state = GameState(players=(active, sharer), supply={1: (_card("Unused"),)})
+
+    state = dogma(state, player_index=0, card_name="Effectful")
+    state = answer_share(state, share=False)
+
+    assert state.players[0].hand == ()
+    assert state.supply[1] == (_card("Unused"),)
+
+
+def test_multiple_shares_only_queue_a_single_bonus_draw() -> None:
+    active_card = _card_with_dogmas(
+        "Effectful", Dogma(text="Do nothing.", icon=Icon.CROWN, effect=_noop)
+    )
+    active = PlayerState(name="Active", board={Color.RED: Pile(cards=(active_card,))})
+    sharer_a = PlayerState(name="A", board={Color.YELLOW: _crown_pile("A", Color.YELLOW)})
+    sharer_b = PlayerState(name="B", board={Color.GREEN: _crown_pile("B", Color.GREEN)})
+    bonus_card = _card("Bonus", age=1)
+    state = GameState(players=(active, sharer_a, sharer_b), supply={1: (bonus_card,)})
+
+    state = dogma(state, player_index=0, card_name="Effectful")
+    state = answer_share(state, share=True)
+    assert pending_decision(state) is not None  # second sharer still needs to decide
+
+    state = answer_share(state, share=True)
+
+    assert state.players[0].hand == (bonus_card,)
+    assert state.supply[1] == ()

@@ -15,7 +15,7 @@ the corresponding rule gets implemented -- precise wording belongs in
 | Draw | Take the top card of a given age from the supply into your hand. | -- |
 | Achieve | Claim an achievement card once eligible. | See actions.md. |
 | Dogma | Activate the printed effect(s) of a card already on your board. | See actions.md. |
-| Share | A non-active player automatically benefits from part of a dogma effect. | Confirm exact trigger condition. |
+| Share | A non-active player, eligible by icon count, opts in to a dogma effect for themselves; if anyone does, the active player also draws a bonus card at their own highest top-card age once resolution finishes (confirmed). | -- |
 | Demand | The active player forces non-active players to suffer part of a dogma effect, gated on an icon-count comparison. | Confirm exact trigger condition. |
 | Icon | One of the symbols printed in a card's four positions (top-left, bottom-left, bottom-center, bottom-right); icon counts across a player's visible board drive achieve/demand thresholds. | Confirm the icon set (see `model/enums.py`). |
 | Special achievement | An achievement earned by satisfying a specific printed condition rather than a score threshold. | Confirm list and conditions. |
