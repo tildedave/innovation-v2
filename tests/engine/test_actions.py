@@ -11,10 +11,12 @@ from innovation.engine.actions import (
     draw_and_tuck,
     meld,
     pending_decision,
+    reveal,
+    score,
     tuck,
 )
 from innovation.model.card import Card, CardIcons, Dogma
-from innovation.model.enums import Color, Icon, Splay
+from innovation.model.enums import Color, Icon, Splay, Zone
 from innovation.model.game_state import GameState
 from innovation.model.pile import Pile
 from innovation.model.player import PlayerState
@@ -307,6 +309,67 @@ def test_tuck_raises_for_a_card_not_in_hand() -> None:
 
     with pytest.raises(ValueError, match="Currency"):
         tuck(state, player_index=0, card_name="Currency")
+
+
+def test_score_moves_the_card_from_hand_to_the_score_pile() -> None:
+    card = _card("Pottery")
+    state = GameState(players=(PlayerState(name="Ada", hand=(card,)),))
+
+    new_state, scored = score(state, player_index=0, card_name="Pottery")
+
+    assert scored is card
+    assert new_state.players[0].hand == ()
+    assert new_state.players[0].score_pile == (card,)
+
+
+def test_score_does_not_modify_the_original_state() -> None:
+    card = _card("Pottery")
+    state = GameState(players=(PlayerState(name="Ada", hand=(card,)),))
+
+    score(state, player_index=0, card_name="Pottery")
+
+    assert state.players[0].hand == (card,)
+    assert state.players[0].score_pile == ()
+
+
+def test_score_appends_after_existing_scored_cards() -> None:
+    already_scored = _card("Already")
+    new_card = _card("New")
+    player = PlayerState(name="Ada", hand=(new_card,), score_pile=(already_scored,))
+    state = GameState(players=(player,))
+
+    new_state, _ = score(state, player_index=0, card_name="New")
+
+    assert new_state.players[0].score_pile == (already_scored, new_card)
+
+
+def test_score_removes_only_the_named_card_from_hand() -> None:
+    keep = _card("Keep")
+    scored_card = _card("Score")
+    player = PlayerState(name="Ada", hand=(keep, scored_card))
+    state = GameState(players=(player,))
+
+    new_state, _ = score(state, player_index=0, card_name="Score")
+
+    assert new_state.players[0].hand == (keep,)
+
+
+def test_score_raises_for_a_card_not_in_hand() -> None:
+    player = PlayerState(name="Ada", hand=(_card("Pottery"),))
+    state = GameState(players=(player,))
+
+    with pytest.raises(ValueError, match="Currency"):
+        score(state, player_index=0, card_name="Currency")
+
+
+@pytest.mark.parametrize("zone", list(Zone))
+def test_reveal_is_a_no_op_regardless_of_zone(zone: Zone) -> None:
+    card = _card("Pottery")
+    state = GameState(players=(PlayerState(name="Ada", hand=(card,)),))
+
+    new_state = reveal(state, player_index=0, card=card, zone=zone)
+
+    assert new_state == state
 
 
 def test_draw_and_tuck_places_the_card_directly_onto_a_new_pile() -> None:

@@ -59,6 +59,20 @@ it" and "what decision is pending" directly from `GameState` fields,
 rather than needing to track that separately or replay history to
 reconstruct it.
 
+## Effects that "repeat" queue themselves, they don't loop
+
+A dogma effect that repeats a step (e.g. Metalworking: "draw and
+reveal a 1, if it has a Castle icon, score it and repeat this effect")
+expresses that by appending a new `EffectStep` for itself onto
+`pending_steps` and returning, rather than looping internally with a
+`while`. `engine.actions._advance` drains the queue one step at a
+time, so a Python loop inside an effect function would resolve the
+whole chain invisibly in a single step; queuing instead keeps every
+iteration ("drew a Castle card, scoring, drawing again") a distinct,
+individually-processable entry in `GameState`, which is what a future
+UI needs to render each step rather than just a before/after diff. See
+`cards.registry._metalworking_dogma` for the pattern.
+
 ## Out of scope for now
 
 No CLI, TUI, or other interface exists yet. The engine should be able

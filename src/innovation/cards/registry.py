@@ -12,10 +12,13 @@ single module to be unwieldy. Track progress in docs/rules/cards.md.
 
 from __future__ import annotations
 
-from innovation.engine.actions import draw_and_meld
+from dataclasses import replace
+
+from innovation.engine.actions import draw, draw_and_meld, reveal, score
 from innovation.model.card import Card, CardIcons, Dogma
-from innovation.model.enums import Color, Icon
+from innovation.model.enums import Color, Icon, Zone
 from innovation.model.game_state import GameState
+from innovation.model.pending import EffectStep
 
 
 def _sailing_dogma(state: GameState, player_index: int) -> GameState:
@@ -37,7 +40,49 @@ SAILING = Card(
     dogmas=(Dogma(text="Draw and meld a 1.", icon=Icon.CROWN, effect=_sailing_dogma),),
 )
 
-CARDS_BY_NAME: dict[str, Card] = {card.name: card for card in [SAILING]}
+
+def _metalworking_dogma(state: GameState, player_index: int) -> GameState:
+    """Metalworking's dogma: draw and reveal a 1; if it has a Castle
+    icon, score it and repeat this effect.
+
+    "Repeat" is expressed as data, not control flow: rather than
+    looping internally, this queues another ``EffectStep`` for itself
+    (see ``innovation.engine.actions._advance``, which drains
+    ``pending_steps`` one step at a time). That keeps every "draw,
+    check, maybe score" cycle a visible, individually-processable step
+    in the queue -- important for an eventual UI that wants to show
+    each one, rather than the whole chain resolving invisibly inside
+    one function call.
+    """
+    state, card = draw(state, player_index, age=1)
+    state = reveal(state, player_index, card, Zone.HAND)
+    if Icon.CASTLE not in card.icons.all_icons():
+        return state
+    state, _ = score(state, player_index, card.name)
+    repeat_step = EffectStep(player_index=player_index, effect=_metalworking_dogma)
+    return replace(state, pending_steps=(*state.pending_steps, repeat_step))
+
+
+METALWORKING = Card(
+    name="Metalworking",
+    age=1,
+    color=Color.RED,
+    icons=CardIcons(
+        top_left=Icon.CASTLE,
+        bottom_left=Icon.CASTLE,
+        bottom_center=Icon.NONE,
+        bottom_right=Icon.CASTLE,
+    ),
+    dogmas=(
+        Dogma(
+            text="Draw and reveal a 1. If it has a Castle icon, score it and repeat this effect.",
+            icon=Icon.CASTLE,
+            effect=_metalworking_dogma,
+        ),
+    ),
+)
+
+CARDS_BY_NAME: dict[str, Card] = {card.name: card for card in [SAILING, METALWORKING]}
 
 
 def all_cards() -> list[Card]:

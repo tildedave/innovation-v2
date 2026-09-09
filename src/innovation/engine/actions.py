@@ -16,6 +16,7 @@ from dataclasses import replace
 
 from innovation.engine.sharing import eligible_to_share
 from innovation.model.card import Card
+from innovation.model.enums import Zone
 from innovation.model.game_state import GameState
 from innovation.model.pending import DrawHighestStep, EffectStep, PendingStep, ShareStep
 from innovation.model.pile import Pile
@@ -94,6 +95,19 @@ def _draw_card_of_age_or_higher(state: GameState, age: int) -> tuple[GameState, 
     raise SupplyExhaustedError(f"no cards available to draw at age {age} or higher")
 
 
+def reveal(state: GameState, player_index: int, card: Card, zone: Zone) -> GameState:
+    """Reveal ``card`` (currently in ``zone``) to the table -- a no-op.
+
+    This changes nothing about game state; it exists purely as an
+    explicit call site so effects that reveal a card (e.g.
+    Metalworking revealing the card it just drew, in ``Zone.HAND``)
+    say so in code, rather than that only existing as a comment. A
+    future UI has something concrete to key off of ("Player 2 reveals
+    Pottery in their hand") instead of having to infer it.
+    """
+    return state
+
+
 def meld(state: GameState, player_index: int, card_name: str) -> tuple[GameState, Card]:
     """The given player melds a named card from their hand onto their board.
 
@@ -117,6 +131,20 @@ def tuck(state: GameState, player_index: int, card_name: str) -> tuple[GameState
     """
     player, card = _take_from_hand(state.players[player_index], card_name)
     new_player = _tuck_onto_board(player, card)
+    return _with_player(state, player_index, new_player), card
+
+
+def score(state: GameState, player_index: int, card_name: str) -> tuple[GameState, Card]:
+    """The given player scores a named card from their hand.
+
+    The card is removed from the player's hand and added to their
+    score pile.
+
+    TODO: this only covers scoring a card already in hand. See
+    docs/rules/glossary.md for what score-pile value ends up meaning.
+    """
+    player, card = _take_from_hand(state.players[player_index], card_name)
+    new_player = replace(player, score_pile=(*player.score_pile, card))
     return _with_player(state, player_index, new_player), card
 
 

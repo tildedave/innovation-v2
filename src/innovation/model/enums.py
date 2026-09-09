@@ -43,3 +43,17 @@ class Splay(Enum):
     LEFT = auto()
     RIGHT = auto()
     UP = auto()
+
+
+class Zone(Enum):
+    """Where a card is when it's revealed -- see engine.actions.reveal.
+
+    Matches the places a card actually lives in the model: a player's
+    hand or score pile or board (``PlayerState``), or the supply
+    (``GameState``).
+    """
+
+    HAND = auto()
+    SCORE_PILE = auto()
+    BOARD = auto()
+    SUPPLY = auto()

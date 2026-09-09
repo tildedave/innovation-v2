@@ -31,6 +31,14 @@ function in
 - Tuck (`engine/actions.tuck`) is the same, except the card goes to
   the *bottom* of its color's pile instead of the top -- used by
   "tuck" dogma effects rather than the base turn actions.
+- Score (`engine/actions.score`) moves a named card from hand to the
+  score pile instead of the board -- used by "score" dogma effects
+  (e.g. Metalworking).
+- Reveal (`engine/actions.reveal`) is a no-op on game state, contextual
+  to a `Zone` (see [glossary.md](glossary.md)) -- used by "draw and
+  reveal" dogma effects (e.g. Metalworking) so the act of showing a
+  card to the table has an explicit call site, even though nothing
+  currently tracks "the revealed card" in `GameState`.
 - Splaying: what it is, the four directions, and which icons become
   visible/countable as a result. (See [glossary.md](glossary.md).)
   Splay left (`engine/board.splay_left`) exposes the bottom-right icon

@@ -11,8 +11,9 @@ the corresponding rule gets implemented -- precise wording belongs in
 | Meld | Play a card from hand face-up onto your board, on top of its color's pile. | -- |
 | Tuck | Place a card at the *bottom* of a color pile instead of melding it on top. | Confirm which effects cause tucking vs. melding. |
 | Splay | Shift a color pile so cards underneath the top card are partially visible, exposing their icons. Splay left exposes the bottom-right icon of each covered card; splay right exposes the top-left and bottom-left icons; splay up exposes every icon except top-left (bottom-left, bottom-center, bottom-right). All confirmed; see `engine/board.py`. | -- |
-| Score | Move a card to your score pile (face down/counted, not part of your visible board). | Confirm how score-pile value is computed. |
+| Score | Move a card to your score pile (face down/counted, not part of your visible board). Implemented as `engine/actions.score` (from hand). | Confirm how score-pile value is computed. |
 | Draw | Take the top card of a given age from the supply into your hand. | -- |
+| Reveal | Show a card to the table without otherwise changing anything about it. A no-op on game state (`engine/actions.reveal`), always contextual to a `Zone` (hand, score pile, board, or supply -- see `model/enums.Zone`) -- it exists as an explicit call site for effects that reveal a card, so an eventual UI has something to render. | -- |
 | Achieve | Claim an achievement card once eligible. | See actions.md. |
 | Dogma | Activate the printed effect(s) of a card already on your board. | See actions.md. |
 | Share | A non-active player, eligible by icon count, opts in to a dogma effect for themselves; if anyone does, the active player also draws a bonus card at their own highest top-card age once resolution finishes (confirmed). | -- |
