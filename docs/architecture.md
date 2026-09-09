@@ -46,8 +46,24 @@ state transitions themselves still only live in `innovation.engine`,
 and implementing its effect(s) can still be done as separate steps:
 `Dogma.effect` is `None` until written (see docs/rules/cards.md).
 
+## GameState models "what's it waiting on," not just board state
+
+`GameState` carries `current_player_index` (whose turn it is) and
+`pending_steps` (see [pending.py](../src/innovation/model/pending.py)
+and `innovation.engine.actions.dogma`/`answer_share`) -- the queue of
+decisions/effects still needed to finish resolving something in
+progress, e.g. asking each player eligible to share a dogma effect, in
+turn, before the active player's own effect runs. This is deliberate:
+a future UI (or any driver) should be able to render "whose turn is
+it" and "what decision is pending" directly from `GameState` fields,
+rather than needing to track that separately or replay history to
+reconstruct it.
+
 ## Out of scope for now
 
 No CLI, TUI, or other interface exists yet. The engine should be able
 to play a complete game headlessly (i.e. be driven entirely by function
 calls / a script) before an interface is built on top of it.
+`current_player_index` is real state now, but nothing advances it
+automatically -- the turn loop itself (whose turn is next, what ends a
+turn) isn't designed yet.

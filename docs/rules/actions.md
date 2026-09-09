@@ -47,28 +47,44 @@ function in
 
 ## Dogma
 
-- Implemented for a single (non-shared, non-demanded) player
-  (`engine/actions.dogma`): the named card must be the top card of one
-  of the acting player's piles; each of its `Dogma.effect`s (see
-  `innovation.model.card.DogmaEffect`) runs in order against the game
-  state, for that player only. Raises `NotImplementedError` if a
+- Implemented (`engine/actions.dogma`): the named card must be the top
+  card of one of the acting player's piles. For each of the card's
+  `Dogma`s (see `innovation.model.card.DogmaEffect`), in order, this
+  queues a `ShareStep` for every eligible player (see below), then an
+  `EffectStep` that runs it for the active player -- see "Sharing" below
+  for how that queue is resolved. Raises `NotImplementedError` if a
   `Dogma` has no `effect` implemented yet (data entered, behavior not
   written -- see docs/rules/cards.md), and `ValueError` if the named
   card isn't on top of one of the player's piles.
 - Each `Dogma` also carries an `icon` (the icon type it's printed
   under on the card), which determines share/demand eligibility.
+
+### Sharing
+
 - Share eligibility is implemented (`engine/sharing.eligible_to_share`):
   a non-active player is eligible to share a dogma effect when their
   count of the dogma's `icon` is >= the active player's count (ties
-  are eligible; confirmed). This only answers "who *may* share" --
-  `dogma` doesn't consult it yet, and sharing is optional per eligible
-  player, so activating a dogma once sharing is wired in becomes a
-  multi-step process (each eligible player decides in turn) rather
-  than the single-player call it is today.
+  are eligible; confirmed). Returned in clockwise turn order starting
+  from the player after the active one.
+- Sharing is optional per eligible player, so activating a dogma with
+  sharing involved is a multi-step process rather than a single call:
+  `GameState.pending_steps` (see `innovation.model.pending`) is the
+  queue of what's left to resolve. `dogma` builds it as
+  `[ShareStep, ShareStep, ..., EffectStep]` (one `ShareStep` per
+  eligible player in turn order, then the active player's own
+  `EffectStep`) and auto-runs any `EffectStep`s at the front (no
+  decision needed) until it hits a `ShareStep` or empties the queue.
+  `pending_decision(state)` returns the `ShareStep` currently awaiting
+  an answer (`None` if nothing's pending), and
+  `answer_share(state, share)` resolves it -- running that player's
+  copy of the effect first if `share` is `True` -- then advances the
+  queue the same way. When nobody is eligible, the queue is just
+  `[EffectStep]` and it all resolves inside the original `dogma` call,
+  same as before sharing existed.
 - TODO: demanding -- when the active player forces a non-eligible
   (i.e. fewer-icon) player to suffer part of the effect instead -- has
-  no eligibility query yet, symmetric to `eligible_to_share` but with
-  the comparison flipped.
+  no eligibility query or step type yet, symmetric to
+  `eligible_to_share`/`ShareStep` but with the comparison flipped.
 - TODO: The "I" rule for repeating an effect once per matching icon --
   confirm and state precisely once found in the rulebook. (Note:
   Sailing does *not* use this pattern -- its dogma is a flat "draw and

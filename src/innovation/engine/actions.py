@@ -14,8 +14,10 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from innovation.engine.sharing import eligible_to_share
 from innovation.model.card import Card
 from innovation.model.game_state import GameState
+from innovation.model.pending import EffectStep, PendingStep, ShareStep
 from innovation.model.pile import Pile
 from innovation.model.player import PlayerState
 
@@ -155,17 +157,63 @@ def dogma(state: GameState, player_index: int, card_name: str) -> GameState:
     """The given player activates the dogma effects of a named card.
 
     The card must be the top card of one of the player's piles (a
-    covered card's dogma can't be activated). Each of the card's
-    dogma effects runs in order, for this player only.
+    covered card's dogma can't be activated). For each of the card's
+    dogma effects, in order, this queues a ``ShareStep`` for every
+    player eligible to share (in clockwise turn order from the active
+    player -- see ``innovation.engine.sharing.eligible_to_share``),
+    followed by an ``EffectStep`` that runs it for the active player.
 
-    TODO: sharing/demanding other players in this effect isn't
-    implemented yet -- see docs/rules/actions.md.
+    Steps that need no decision run immediately; the returned state
+    pauses at the first step that does (see ``pending_decision`` and
+    ``answer_share``) -- when nobody is eligible to share anything,
+    that means every effect has already run by the time this returns.
+
+    TODO: demanding isn't implemented yet -- see docs/rules/actions.md.
     """
     card = _require_top_card(state.players[player_index], card_name)
+    new_steps: list[PendingStep] = []
     for card_dogma in card.dogmas:
         if card_dogma.effect is None:
             raise NotImplementedError(f"{card_name!r} has no dogma effect implementation yet")
-        state = card_dogma.effect(state, player_index)
+        sharers = eligible_to_share(state, player_index, card_dogma.icon)
+        new_steps.extend(
+            ShareStep(player_index=sharer, card_name=card_name, effect=card_dogma.effect)
+            for sharer in sharers
+        )
+        new_steps.append(EffectStep(player_index=player_index, effect=card_dogma.effect))
+    state = replace(state, pending_steps=(*state.pending_steps, *new_steps))
+    return _advance(state)
+
+
+def pending_decision(state: GameState) -> ShareStep | None:
+    """Return the share decision currently awaiting an answer, if any."""
+    if state.pending_steps and isinstance(state.pending_steps[0], ShareStep):
+        return state.pending_steps[0]
+    return None
+
+
+def answer_share(state: GameState, share: bool) -> GameState:
+    """Resolve the pending share decision (see ``pending_decision``).
+
+    If ``share`` is True, the eligible player's copy of the effect
+    runs (for free) before the queue advances; if False, it's skipped.
+    Raises ``ValueError`` if no share decision is pending.
+    """
+    step = pending_decision(state)
+    if step is None:
+        raise ValueError("no pending share decision to answer")
+    state = replace(state, pending_steps=state.pending_steps[1:])
+    if share:
+        state = step.effect(state, step.player_index)
+    return _advance(state)
+
+
+def _advance(state: GameState) -> GameState:
+    """Run leading ``EffectStep``s until the queue is empty or hits a ``ShareStep``."""
+    while state.pending_steps and isinstance(state.pending_steps[0], EffectStep):
+        step = state.pending_steps[0]
+        state = replace(state, pending_steps=state.pending_steps[1:])
+        state = step.effect(state, step.player_index)
     return state
 
 

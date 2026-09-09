@@ -4,11 +4,13 @@ import pytest
 
 from innovation.engine.actions import (
     SupplyExhaustedError,
+    answer_share,
     dogma,
     draw,
     draw_and_meld,
     draw_and_tuck,
     meld,
+    pending_decision,
     tuck,
 )
 from innovation.model.card import Card, CardIcons, Dogma
@@ -467,3 +469,89 @@ def test_dogma_raises_not_implemented_for_a_dogma_without_an_effect() -> None:
 
     with pytest.raises(NotImplementedError, match="NoEffectYet"):
         dogma(state, player_index=0, card_name="NoEffectYet")
+
+
+def _card_with_icon(name: str, icon: Icon, color: Color = Color.RED) -> Card:
+    return Card(
+        name=name,
+        age=1,
+        color=color,
+        icons=CardIcons(
+            top_left=icon,
+            bottom_left=Icon.NONE,
+            bottom_center=Icon.NONE,
+            bottom_right=Icon.NONE,
+        ),
+    )
+
+
+def _crown_pile(name: str, color: Color) -> Pile:
+    return Pile(cards=(_card_with_icon(f"{name}-crown", Icon.CROWN, color=color),))
+
+
+def test_pending_decision_is_none_by_default() -> None:
+    state = GameState(players=(PlayerState(name="Ada"),))
+
+    assert pending_decision(state) is None
+
+
+def test_answer_share_raises_when_nothing_is_pending() -> None:
+    state = GameState(players=(PlayerState(name="Ada"),))
+
+    with pytest.raises(ValueError, match="no pending share decision"):
+        answer_share(state, share=True)
+
+
+def test_dogma_full_sharing_flow_matches_turn_order_and_resolves_in_order() -> None:
+    """Reproduces the example flow: player 2 activates a Crown dogma,
+    players 3 and 1 are eligible (in that turn order), player 0 is not.
+    """
+
+    def draw_one(state: GameState, player_index: int) -> GameState:
+        state, _ = draw(state, player_index, age=1)
+        return state
+
+    active_card = _card_with_dogmas(
+        "Effectful", Dogma(text="Draw a 1.", icon=Icon.CROWN, effect=draw_one)
+    )
+    p0 = PlayerState(name="P0")  # no crowns -- not eligible
+    p1 = PlayerState(name="P1", board={Color.YELLOW: _crown_pile("P1", Color.YELLOW)})
+    active = PlayerState(
+        name="Active",
+        board={
+            Color.RED: Pile(cards=(active_card,)),
+            Color.GREEN: _crown_pile("Active", Color.GREEN),
+        },
+    )
+    p3 = PlayerState(
+        name="P3",
+        board={
+            Color.YELLOW: _crown_pile("P3a", Color.YELLOW),
+            Color.BLUE: _crown_pile("P3b", Color.BLUE),
+        },
+    )
+    card_z, card_y, card_x = _card("Z"), _card("Y"), _card("X")
+    state = GameState(players=(p0, p1, active, p3), supply={1: (card_z, card_y, card_x)})
+
+    state = dogma(state, player_index=2, card_name="Effectful")
+
+    decision = pending_decision(state)
+    assert decision is not None
+    assert decision.player_index == 3
+    assert decision.card_name == "Effectful"
+
+    # Player 3 shares: draws a card, then it's Player 1's turn to decide.
+    state = answer_share(state, share=True)
+    assert state.players[3].hand == (card_z,)
+    decision = pending_decision(state)
+    assert decision is not None
+    assert decision.player_index == 1
+
+    # Player 1 declines: no card for them, and the active player's own
+    # effect then runs automatically (no decision needed for it).
+    state = answer_share(state, share=False)
+    assert state.players[1].hand == ()
+    assert state.players[2].hand == (card_y,)
+    assert state.supply[1] == (card_x,)
+    assert pending_decision(state) is None
+    assert state.pending_steps == ()
