@@ -1,19 +1,20 @@
-"""Tests for the Draw action (src/innovation/engine/actions.py)."""
+"""Tests for the Draw and Meld actions (src/innovation/engine/actions.py)."""
 
 import pytest
 
-from innovation.engine.actions import SupplyExhaustedError, draw
+from innovation.engine.actions import SupplyExhaustedError, draw, draw_and_meld, meld
 from innovation.model.card import Card, CardIcons
-from innovation.model.enums import Color, Icon
+from innovation.model.enums import Color, Icon, Splay
 from innovation.model.game_state import GameState
+from innovation.model.pile import Pile
 from innovation.model.player import PlayerState
 
 
-def _card(name: str, age: int) -> Card:
+def _card(name: str, age: int = 1, color: Color = Color.RED) -> Card:
     return Card(
         name=name,
         age=age,
-        color=Color.RED,
+        color=color,
         icons=CardIcons(
             top_left=Icon.NONE,
             bottom_left=Icon.NONE,
@@ -93,3 +94,130 @@ def test_draw_rejects_an_age_outside_one_through_ten(age: int) -> None:
 
     with pytest.raises(ValueError, match="age"):
         draw(state, player_index=0, age=age)
+
+
+def test_draw_and_meld_places_the_card_directly_onto_a_new_pile() -> None:
+    card = _card("Pottery", age=1, color=Color.RED)
+    state = GameState(players=[PlayerState(name="Ada")], supply={1: [card]})
+
+    melded = draw_and_meld(state, player_index=0, age=1)
+
+    assert melded is card
+    assert state.players[0].hand == []
+    assert state.players[0].board[Color.RED].cards == [card]
+    assert state.supply[1] == []
+
+
+def test_draw_and_meld_places_the_card_on_top_of_an_existing_pile() -> None:
+    old_top = _card("OldTop", color=Color.RED)
+    new_card = _card("NewTop", age=1, color=Color.RED)
+    player = PlayerState(name="Ada", board={Color.RED: Pile(cards=[old_top])})
+    state = GameState(players=[player], supply={1: [new_card]})
+
+    draw_and_meld(state, player_index=0, age=1)
+
+    assert player.board[Color.RED].cards == [new_card, old_top]
+
+
+def test_draw_and_meld_preserves_the_splay_of_an_existing_pile() -> None:
+    old_top = _card("OldTop", color=Color.RED)
+    new_card = _card("NewTop", age=1, color=Color.RED)
+    player = PlayerState(name="Ada", board={Color.RED: Pile(cards=[old_top], splay=Splay.UP)})
+    state = GameState(players=[player], supply={1: [new_card]})
+
+    draw_and_meld(state, player_index=0, age=1)
+
+    assert player.board[Color.RED].splay is Splay.UP
+
+
+def test_draw_and_meld_falls_back_to_the_next_age_when_the_pile_is_empty() -> None:
+    card = _card("Currency", age=2)
+    state = GameState(players=[PlayerState(name="Ada")], supply={1: [], 2: [card]})
+
+    melded = draw_and_meld(state, player_index=0, age=1)
+
+    assert melded is card
+
+
+def test_draw_and_meld_raises_supply_exhausted_when_nothing_is_available() -> None:
+    state = GameState(players=[PlayerState(name="Ada")], supply={9: [], 10: []})
+
+    with pytest.raises(SupplyExhaustedError, match="age 9"):
+        draw_and_meld(state, player_index=0, age=9)
+
+
+@pytest.mark.parametrize("age", [0, -1, 11])
+def test_draw_and_meld_rejects_an_age_outside_one_through_ten(age: int) -> None:
+    state = GameState(players=[PlayerState(name="Ada")])
+
+    with pytest.raises(ValueError, match="age"):
+        draw_and_meld(state, player_index=0, age=age)
+
+
+def test_meld_moves_the_card_from_hand_to_a_new_pile_of_its_color() -> None:
+    card = _card("Pottery", color=Color.RED)
+    state = GameState(players=[PlayerState(name="Ada", hand=[card])])
+
+    melded = meld(state, player_index=0, card_name="Pottery")
+
+    assert melded is card
+    assert state.players[0].hand == []
+    assert state.players[0].board[Color.RED].cards == [card]
+
+
+def test_meld_places_the_card_on_top_of_an_existing_pile_of_the_same_color() -> None:
+    old_top = _card("OldTop", color=Color.RED)
+    new_card = _card("NewTop", color=Color.RED)
+    player = PlayerState(name="Ada", hand=[new_card], board={Color.RED: Pile(cards=[old_top])})
+    state = GameState(players=[player])
+
+    meld(state, player_index=0, card_name="NewTop")
+
+    assert player.board[Color.RED].cards == [new_card, old_top]
+
+
+def test_meld_preserves_the_splay_of_an_existing_pile() -> None:
+    old_top = _card("OldTop", color=Color.RED)
+    new_card = _card("NewTop", color=Color.RED)
+    player = PlayerState(
+        name="Ada",
+        hand=[new_card],
+        board={Color.RED: Pile(cards=[old_top], splay=Splay.LEFT)},
+    )
+    state = GameState(players=[player])
+
+    meld(state, player_index=0, card_name="NewTop")
+
+    assert player.board[Color.RED].splay is Splay.LEFT
+
+
+def test_meld_creates_separate_piles_per_color() -> None:
+    red_card = _card("Red", color=Color.RED)
+    blue_card = _card("Blue", color=Color.BLUE)
+    player = PlayerState(name="Ada", hand=[red_card, blue_card])
+    state = GameState(players=[player])
+
+    meld(state, player_index=0, card_name="Red")
+    meld(state, player_index=0, card_name="Blue")
+
+    assert player.board[Color.RED].cards == [red_card]
+    assert player.board[Color.BLUE].cards == [blue_card]
+
+
+def test_meld_removes_only_the_named_card_from_hand() -> None:
+    keep = _card("Keep")
+    melded_card = _card("Meld")
+    player = PlayerState(name="Ada", hand=[keep, melded_card])
+    state = GameState(players=[player])
+
+    meld(state, player_index=0, card_name="Meld")
+
+    assert player.hand == [keep]
+
+
+def test_meld_raises_for_a_card_not_in_hand() -> None:
+    player = PlayerState(name="Ada", hand=[_card("Pottery")])
+    state = GameState(players=[player])
+
+    with pytest.raises(ValueError, match="Currency"):
+        meld(state, player_index=0, card_name="Currency")
