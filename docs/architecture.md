@@ -12,10 +12,12 @@ src/innovation/
 ## Design principle: data model vs. rules engine
 
 `innovation.model` only defines *shapes* -- `Card`, `PlayerState`,
-`GameState`. Nothing in that package enforces a rule or mutates state
-on its own. `innovation.engine` is the only package that should apply
-rules and produce state transitions (e.g. `engine.actions.meld`
-mutating a `GameState`).
+`GameState` -- and every one of them is frozen (immutable). Nothing in
+that package enforces a rule or produces a new state on its own.
+`innovation.engine` is the only package that should apply rules, and
+it does so by returning a *new* state rather than mutating the one
+it's given (e.g. `engine.actions.meld` takes a `GameState` and returns
+a new one with the card moved, leaving the original untouched).
 
 This split exists so that:
 
@@ -25,6 +27,9 @@ This split exists so that:
   fixtures without going through a full game setup.
 - A future interface (CLI, web, etc.) only needs to depend on
   `innovation.engine` and `innovation.model`, not reimplement rules.
+- Immutable, copy-free state transitions are what future search
+  algorithms (minimax, MCTS, etc.) need to branch and backtrack over
+  possible games without deep-copying state or writing undo logic.
 
 ## Cards are data, dogma effects are code
 

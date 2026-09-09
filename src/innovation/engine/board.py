@@ -1,6 +1,8 @@
-"""Board queries and mutations: splaying piles and counting visible icons."""
+"""Board queries and transitions: splaying piles and counting visible icons."""
 
 from __future__ import annotations
+
+from dataclasses import replace
 
 from innovation.model.card import CardIcons
 from innovation.model.enums import Color, Icon, Splay
@@ -8,40 +10,44 @@ from innovation.model.pile import Pile
 from innovation.model.player import PlayerState
 
 
-def splay_left(player: PlayerState, color: Color) -> None:
-    """Splay a player's pile of the given color to the left.
+def splay_left(player: PlayerState, color: Color) -> PlayerState:
+    """Return a copy of ``player`` with their ``color`` pile splayed left.
 
     Splaying left exposes the bottom-right icon of every card in the
     pile except the top card, which is always fully visible.
     """
-    pile = _require_pile(player, color)
-    pile.splay = Splay.LEFT
+    return _with_splay(player, color, Splay.LEFT)
 
 
-def splay_right(player: PlayerState, color: Color) -> None:
-    """Splay a player's pile of the given color to the right.
+def splay_right(player: PlayerState, color: Color) -> PlayerState:
+    """Return a copy of ``player`` with their ``color`` pile splayed right.
 
     Splaying right exposes the top-left and bottom-left icons of every
     card in the pile except the top card, which is always fully visible.
     """
-    pile = _require_pile(player, color)
-    pile.splay = Splay.RIGHT
+    return _with_splay(player, color, Splay.RIGHT)
 
 
-def splay_up(player: PlayerState, color: Color) -> None:
-    """Splay a player's pile of the given color up.
+def splay_up(player: PlayerState, color: Color) -> PlayerState:
+    """Return a copy of ``player`` with their ``color`` pile splayed up.
 
     Splaying up exposes every icon except the top-left icon (i.e. the
     bottom-left, bottom-center, and bottom-right icons) of every card
     in the pile except the top card, which is always fully visible.
     """
-    pile = _require_pile(player, color)
-    pile.splay = Splay.UP
+    return _with_splay(player, color, Splay.UP)
 
 
 def count_icons(player: PlayerState, icon: Icon) -> int:
     """Count how many of a given icon are currently visible on a player's board."""
     return sum(_visible_icons(pile).count(icon) for pile in player.board.values())
+
+
+def _with_splay(player: PlayerState, color: Color, splay: Splay) -> PlayerState:
+    pile = _require_pile(player, color)
+    new_board = dict(player.board)
+    new_board[color] = replace(pile, splay=splay)
+    return replace(player, board=new_board)
 
 
 def _require_pile(player: PlayerState, color: Color) -> Pile:

@@ -8,9 +8,14 @@ from innovation.model.card import Card
 from innovation.model.enums import Splay
 
 
-@dataclass
+@dataclass(frozen=True)
 class Pile:
     """One color's stack of melded cards for a single player.
+
+    Immutable: every change (splaying, adding a card) is expressed as
+    a new ``Pile`` -- see ``innovation.engine.board`` and
+    ``innovation.engine.actions``, which build one with
+    ``dataclasses.replace`` rather than mutating this one.
 
     ``cards[0]`` is the top of the pile and is always fully visible;
     the rest are covered, ordered from just-underneath-the-top to the
@@ -18,5 +23,5 @@ class Pile:
     also visible -- see ``innovation.engine.board.count_icons``.
     """
 
-    cards: list[Card] = field(default_factory=list)
+    cards: tuple[Card, ...] = field(default_factory=tuple)
     splay: Splay = Splay.NONE

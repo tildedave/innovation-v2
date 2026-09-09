@@ -9,10 +9,14 @@ check.
 - `mypy --strict` passes at all times. Every function has a full
   signature (including `-> None`); no bare `Any` without a comment
   explaining why it's unavoidable.
-- Prefer `dataclass` for plain-data types. Make a dataclass `frozen`
-  when instances represent fixed, shared definitions (e.g. `Card`);
-  leave it mutable when it represents in-progress state (e.g.
-  `PlayerState`, `GameState`).
+- Prefer `dataclass` for plain-data types. Every type in
+  `innovation.model` is `frozen`, including in-progress game state
+  (`PlayerState`, `GameState`) -- see [architecture.md](architecture.md)
+  for why. Use tuples, not lists, for their collection fields; a `dict`
+  field is fine but typed as `Mapping` so mypy flags accidental
+  mutation through it. Engine functions that change state build and
+  return a new instance with `dataclasses.replace`, they never mutate
+  the one they're given.
 - Use `from __future__ import annotations` in every module.
 
 ## Naming
