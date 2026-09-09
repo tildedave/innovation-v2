@@ -17,6 +17,11 @@ function in
   on the player's board.
 - Splaying: what it is, the four directions, and which icons become
   visible/countable as a result. (See [glossary.md](glossary.md).)
+  Splay left (`engine/board.splay_left`) exposes the bottom-right icon
+  of each covered card; splay right (`engine/board.splay_right`)
+  exposes the top-left and bottom-left icons; splay up
+  (`engine/board.splay_up`) exposes every icon except top-left. All
+  three directions are implemented.
 
 ## Achieve
 

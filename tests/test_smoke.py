@@ -1,6 +1,6 @@
 """Smoke tests confirming the package skeleton is importable and wired up."""
 
-from innovation.model.card import Card
+from innovation.model.card import Card, CardIcons
 from innovation.model.enums import Color, Icon
 from innovation.model.game_state import GameState
 
@@ -16,7 +16,12 @@ def test_card_is_constructible() -> None:
         name="Placeholder",
         age=1,
         color=Color.RED,
-        icons=(Icon.CASTLE, Icon.NONE, Icon.NONE, Icon.NONE),
+        icons=CardIcons(
+            top_left=Icon.CASTLE,
+            bottom_left=Icon.NONE,
+            bottom_center=Icon.NONE,
+            bottom_right=Icon.NONE,
+        ),
     )
 
     assert card.age == 1

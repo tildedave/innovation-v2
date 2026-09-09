@@ -31,3 +31,15 @@ class Icon(Enum):
     CLOCK = auto()
     BULB = auto()
     NONE = auto()
+
+
+class Splay(Enum):
+    """How a color pile is fanned out, exposing covered cards' icons.
+
+    NONE means unsplayed: only the top card of the pile is visible.
+    """
+
+    NONE = auto()
+    LEFT = auto()
+    RIGHT = auto()
+    UP = auto()
