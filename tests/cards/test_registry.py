@@ -4,6 +4,7 @@ import pytest
 
 from innovation.cards.registry import (
     AGRICULTURE,
+    DOMESTICATION,
     METALWORKING,
     SAILING,
     _metalworking_dogma,
@@ -12,6 +13,7 @@ from innovation.cards.registry import (
 )
 from innovation.engine.actions import (
     SupplyExhaustedError,
+    answer_choice,
     answer_optional,
     dogma,
     pending_decision,
@@ -19,7 +21,7 @@ from innovation.engine.actions import (
 from innovation.model.card import Card, CardIcons
 from innovation.model.enums import Color, Icon
 from innovation.model.game_state import GameState
-from innovation.model.pending import EffectStep, OptionalStep
+from innovation.model.pending import ChoiceStep, EffectStep, OptionalStep
 from innovation.model.pile import Pile
 from innovation.model.player import PlayerState
 
@@ -95,8 +97,8 @@ def test_metalworking_has_one_castle_dogma_with_an_implemented_effect() -> None:
 
 
 def test_all_cards_and_cards_of_age_include_every_registered_card() -> None:
-    assert all_cards() == [SAILING, METALWORKING, AGRICULTURE]
-    assert cards_of_age(1) == [SAILING, METALWORKING, AGRICULTURE]
+    assert all_cards() == [SAILING, METALWORKING, AGRICULTURE, DOMESTICATION]
+    assert cards_of_age(1) == [SAILING, METALWORKING, AGRICULTURE, DOMESTICATION]
     assert cards_of_age(2) == []
 
 
@@ -268,3 +270,114 @@ def test_agricultures_dogma_return_raises_for_a_card_not_in_hand() -> None:
 
     with pytest.raises(ValueError, match="NotInHand"):
         answer_optional(state, card_name="NotInHand")
+
+
+def test_domestication_is_a_yellow_age_one_card() -> None:
+    assert DOMESTICATION.age == 1
+    assert DOMESTICATION.color == Color.YELLOW
+
+
+def test_domestication_icons() -> None:
+    assert DOMESTICATION.icons.top_left == Icon.CASTLE
+    assert DOMESTICATION.icons.bottom_left == Icon.CROWN
+    assert DOMESTICATION.icons.bottom_center == Icon.NONE
+    assert DOMESTICATION.icons.bottom_right == Icon.CASTLE
+
+
+def test_domestication_has_one_castle_dogma_with_an_implemented_effect() -> None:
+    assert len(DOMESTICATION.dogmas) == 1
+    assert DOMESTICATION.dogmas[0].icon == Icon.CASTLE
+    assert DOMESTICATION.dogmas[0].effect is not None
+
+
+def test_domestications_dogma_pauses_on_a_choice_decision() -> None:
+    low_card = _card("LowCard", age=1, color=Color.GREEN)
+    player = PlayerState(
+        name="Ada", hand=(low_card,), board={Color.YELLOW: Pile(cards=(DOMESTICATION,))}
+    )
+    state = GameState(players=(player,))
+
+    new_state = dogma(state, player_index=0, card_name="Domestication")
+
+    decision = pending_decision(new_state)
+    assert isinstance(decision, ChoiceStep)
+    assert decision.player_index == 0
+    assert decision.card_name == "Domestication"
+
+
+def test_domestications_dogma_melds_the_chosen_lowest_card_and_draws_a_one() -> None:
+    high_card = _card("HighCard", age=5, color=Color.BLUE)
+    low_card = _card("LowCard", age=1, color=Color.GREEN)
+    mid_card = _card("MidCard", age=3, color=Color.PURPLE)
+    drawn_card = _card("Drawn", age=1, color=Color.RED)
+    player = PlayerState(
+        name="Ada",
+        hand=(high_card, low_card, mid_card),
+        board={Color.YELLOW: Pile(cards=(DOMESTICATION,))},
+    )
+    state = GameState(players=(player,), supply={1: (drawn_card,)})
+
+    state = dogma(state, player_index=0, card_name="Domestication")
+    state = answer_choice(state, card_name="LowCard")
+
+    assert state.players[0].board[Color.GREEN].cards == (low_card,)
+    assert state.players[0].hand == (high_card, mid_card, drawn_card)
+    assert state.supply[1] == ()
+    assert pending_decision(state) is None
+
+
+def test_domestications_dogma_allows_choosing_either_tied_lowest_card() -> None:
+    low_a = _card("LowA", age=1, color=Color.GREEN)
+    low_b = _card("LowB", age=1, color=Color.BLUE)
+    drawn_card = _card("Drawn", age=1, color=Color.RED)
+    player = PlayerState(
+        name="Ada", hand=(low_a, low_b), board={Color.YELLOW: Pile(cards=(DOMESTICATION,))}
+    )
+    state = GameState(players=(player,), supply={1: (drawn_card,)})
+
+    state = dogma(state, player_index=0, card_name="Domestication")
+    state = answer_choice(state, card_name="LowB")
+
+    assert state.players[0].board[Color.BLUE].cards == (low_b,)
+    assert state.players[0].hand == (low_a, drawn_card)
+
+
+def test_domestications_dogma_rejects_a_card_that_is_not_the_lowest() -> None:
+    high_card = _card("HighCard", age=5, color=Color.BLUE)
+    low_card = _card("LowCard", age=1, color=Color.GREEN)
+    player = PlayerState(
+        name="Ada", hand=(high_card, low_card), board={Color.YELLOW: Pile(cards=(DOMESTICATION,))}
+    )
+    state = GameState(players=(player,))
+
+    state = dogma(state, player_index=0, card_name="Domestication")
+
+    with pytest.raises(ValueError, match="not the lowest"):
+        answer_choice(state, card_name="HighCard")
+
+    # Rejected: nothing happened, the decision is still pending.
+    assert pending_decision(state) is not None
+    assert state.players[0].hand == (high_card, low_card)
+
+
+def test_domestications_dogma_rejects_a_card_not_in_hand() -> None:
+    low_card = _card("LowCard", age=1, color=Color.GREEN)
+    player = PlayerState(
+        name="Ada", hand=(low_card,), board={Color.YELLOW: Pile(cards=(DOMESTICATION,))}
+    )
+    state = GameState(players=(player,))
+
+    state = dogma(state, player_index=0, card_name="Domestication")
+
+    with pytest.raises(ValueError, match="NotInHand"):
+        answer_choice(state, card_name="NotInHand")
+
+
+def test_domestications_dogma_raises_when_hand_is_empty() -> None:
+    player = PlayerState(name="Ada", board={Color.YELLOW: Pile(cards=(DOMESTICATION,))})
+    state = GameState(players=(player,))
+
+    state = dogma(state, player_index=0, card_name="Domestication")
+
+    with pytest.raises(ValueError):
+        answer_choice(state, card_name="AnyCard")

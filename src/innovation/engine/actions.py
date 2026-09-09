@@ -19,6 +19,7 @@ from innovation.model.card import Card
 from innovation.model.enums import Zone
 from innovation.model.game_state import GameState
 from innovation.model.pending import (
+    ChoiceStep,
     DrawHighestStep,
     EffectStep,
     OptionalStep,
@@ -169,6 +170,29 @@ def return_card(state: GameState, player_index: int, card_name: str) -> tuple[Ga
     return replace(state, supply=new_supply), card
 
 
+def validate_lowest_in_hand(state: GameState, player_index: int, card_name: str) -> None:
+    """Raise ``ValueError`` unless ``card_name`` is (one of, if tied)
+    the lowest-age card(s) in the given player's hand.
+
+    A reusable ``CardChoiceValidator`` (see
+    ``innovation.model.pending``) for "the lowest card in your hand"
+    effects -- e.g. Domestication's ``ChoiceStep.validate`` -- so any
+    future dogma with this same constraint can reuse it rather than
+    reimplementing the comparison.
+    """
+    hand = state.players[player_index].hand
+    chosen = next((card for card in hand if card.name == card_name), None)
+    if chosen is None:
+        raise ValueError(
+            f"player {state.players[player_index].name!r} has no {card_name!r} in hand"
+        )
+    lowest_age = min(card.age for card in hand)
+    if chosen.age != lowest_age:
+        raise ValueError(
+            f"{card_name!r} (age {chosen.age}) is not the lowest card in hand (age {lowest_age})"
+        )
+
+
 def _with_player(state: GameState, player_index: int, player: PlayerState) -> GameState:
     new_players = list(state.players)
     new_players[player_index] = player
@@ -239,13 +263,16 @@ def dogma(state: GameState, player_index: int, card_name: str) -> GameState:
     return _advance(state)
 
 
-def pending_decision(state: GameState) -> ShareStep | OptionalStep | None:
+def pending_decision(state: GameState) -> ShareStep | OptionalStep | ChoiceStep | None:
     """Return the decision currently awaiting an answer, if any.
 
-    A ``ShareStep`` (see ``answer_share``) or ``OptionalStep`` (see
-    ``answer_optional``); ``None`` if nothing needs a decision right now.
+    A ``ShareStep`` (see ``answer_share``), ``OptionalStep`` (see
+    ``answer_optional``), or ``ChoiceStep`` (see ``answer_choice``);
+    ``None`` if nothing needs a decision right now.
     """
-    if state.pending_steps and isinstance(state.pending_steps[0], ShareStep | OptionalStep):
+    if state.pending_steps and isinstance(
+        state.pending_steps[0], ShareStep | OptionalStep | ChoiceStep
+    ):
         return state.pending_steps[0]
     return None
 
@@ -293,6 +320,27 @@ def answer_optional(state: GameState, card_name: str | None) -> GameState:
         state = step.if_done(state, step.player_index, acted_on_card)
     elif step.if_declined is not None:
         state = step.if_declined(state, step.player_index)
+    return _advance(state)
+
+
+def answer_choice(state: GameState, card_name: str) -> GameState:
+    """Resolve the pending mandatory-choice decision (see ``pending_decision``).
+
+    Unlike ``answer_optional``, there's no declining -- ``card_name``
+    is required. If the step has a ``validate`` (see ``ChoiceStep``),
+    it runs first and can reject the choice with a ``ValueError``
+    before anything else happens; then the step's ``action`` runs on
+    it and ``if_done`` runs with the resulting card. Raises
+    ``ValueError`` if no choice decision is pending.
+    """
+    step = pending_decision(state)
+    if not isinstance(step, ChoiceStep):
+        raise ValueError("no pending choice decision to answer")
+    state = replace(state, pending_steps=state.pending_steps[1:])
+    if step.validate is not None:
+        step.validate(state, step.player_index, card_name)
+    state, acted_on_card = step.action(state, step.player_index, card_name)
+    state = step.if_done(state, step.player_index, acted_on_card)
     return _advance(state)
 
 

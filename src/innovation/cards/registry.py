@@ -14,11 +14,19 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from innovation.engine.actions import draw, draw_and_meld, return_card, reveal, score
+from innovation.engine.actions import (
+    draw,
+    draw_and_meld,
+    meld,
+    return_card,
+    reveal,
+    score,
+    validate_lowest_in_hand,
+)
 from innovation.model.card import Card, CardIcons, Dogma
 from innovation.model.enums import Color, Icon, Zone
 from innovation.model.game_state import GameState
-from innovation.model.pending import EffectStep, OptionalStep
+from innovation.model.pending import ChoiceStep, EffectStep, OptionalStep
 
 
 def _sailing_dogma(state: GameState, player_index: int) -> GameState:
@@ -88,21 +96,19 @@ def _agriculture_dogma(state: GameState, player_index: int) -> GameState:
     you do, draw and score a card of value one higher than the card
     you return.
     """
+
+    def after_return(state: GameState, player_index: int, returned_card: Card) -> GameState:
+        state, drawn = draw(state, player_index, age=returned_card.age + 1)
+        state, _ = score(state, player_index, drawn.name)
+        return state
+
     optional_step = OptionalStep(
         player_index=player_index,
         card_name="Agriculture",
         action=return_card,
-        if_done=_agriculture_after_return,
+        if_done=after_return,
     )
     return replace(state, pending_steps=(*state.pending_steps, optional_step))
-
-
-def _agriculture_after_return(
-    state: GameState, player_index: int, returned_card: Card
-) -> GameState:
-    state, drawn = draw(state, player_index, age=returned_card.age + 1)
-    state, _ = score(state, player_index, drawn.name)
-    return state
 
 
 AGRICULTURE = Card(
@@ -127,7 +133,52 @@ AGRICULTURE = Card(
     ),
 )
 
-CARDS_BY_NAME: dict[str, Card] = {card.name: card for card in [SAILING, METALWORKING, AGRICULTURE]}
+
+def _domestication_dogma(state: GameState, player_index: int) -> GameState:
+    """Domestication's dogma: meld the lowest card in your hand, then draw a 1.
+
+    Not optional -- melding happens no matter what -- but the player
+    still chooses *which* card (there may be a tie for lowest age);
+    the choice is validated to actually be a lowest-age card rather
+    than picked automatically.
+    """
+
+    def after_meld(state: GameState, player_index: int, melded_card: Card) -> GameState:
+        state, _ = draw(state, player_index, age=1)
+        return state
+
+    choice_step = ChoiceStep(
+        player_index=player_index,
+        card_name="Domestication",
+        action=meld,
+        if_done=after_meld,
+        validate=validate_lowest_in_hand,
+    )
+    return replace(state, pending_steps=(*state.pending_steps, choice_step))
+
+
+DOMESTICATION = Card(
+    name="Domestication",
+    age=1,
+    color=Color.YELLOW,
+    icons=CardIcons(
+        top_left=Icon.CASTLE,
+        bottom_left=Icon.CROWN,
+        bottom_center=Icon.NONE,
+        bottom_right=Icon.CASTLE,
+    ),
+    dogmas=(
+        Dogma(
+            text="Meld the lowest card in your hand. Draw a 1.",
+            icon=Icon.CASTLE,
+            effect=_domestication_dogma,
+        ),
+    ),
+)
+
+CARDS_BY_NAME: dict[str, Card] = {
+    card.name: card for card in [SAILING, METALWORKING, AGRICULTURE, DOMESTICATION]
+}
 
 
 def all_cards() -> list[Card]:

@@ -140,6 +140,26 @@ function in
   leaves it `None` since "any card in hand" is already a fully legal
   choice; it exists for a future card with a real constraint (e.g. "a
   card of a color you don't have").
+
+### Mandatory choices within an effect
+
+- Some effects aren't optional at all but still require the player to
+  pick *which* card -- e.g. Domestication: "meld the lowest card in
+  your hand. Draw a 1." (there may be a tie for lowest age, so it's a
+  real choice, just a constrained one). This is `ChoiceStep`, not
+  `OptionalStep`: reusing `OptionalStep` here by simply never answering
+  `None` would leave a caller able to "decline" a decision the rules
+  text doesn't allow declining, so there's no `if_declined` and no
+  concept of skipping it at all.
+- `ChoiceStep` shares `action`/`if_done`/`validate` with `OptionalStep`
+  (same `CardAction`/`CardEffect`/`CardChoiceValidator` shapes), but
+  `answer_choice(state, card_name)` takes `card_name: str` -- required,
+  not `str | None` -- so there's no decline path in the type itself.
+  Domestication's `validate` is `engine.actions.validate_lowest_in_hand`,
+  a reusable check (not specific to Domestication) for "is this card
+  (one of, if tied) the lowest-age card in the player's hand" -- other
+  "lowest card in hand" effects should reuse it rather than
+  reimplementing the comparison.
 - TODO: The "I" rule for repeating an effect once per matching icon --
   confirm and state precisely once found in the rulebook. (Note:
   Sailing does *not* use this pattern -- its dogma is a flat "draw and

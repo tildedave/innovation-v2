@@ -41,7 +41,7 @@ CardChoiceValidator = Callable[["GameState", int, str], None]
 they chose, raises ``ValueError`` if that choice isn't legal for this
 particular decision (beyond just "is it in hand," which ``action``
 already checks) -- otherwise returns normally. See
-``OptionalStep.validate``.
+``OptionalStep.validate`` and ``ChoiceStep.validate``.
 """
 
 
@@ -126,4 +126,33 @@ class OptionalStep:
     validate: CardChoiceValidator | None = None
 
 
-PendingStep = ShareStep | EffectStep | DrawHighestStep | OptionalStep
+@dataclass(frozen=True)
+class ChoiceStep:
+    """The game is waiting on ``player_index`` to choose a card from
+    their hand to act on -- mandatory, no decline, unlike
+    ``OptionalStep``. E.g. Domestication's "meld the lowest card in
+    your hand": the player still picks *which* card (there may be a
+    tie for lowest age), but the choice isn't free -- it must satisfy
+    ``validate``.
+
+    ``validate``, if set, runs before ``action`` and raises
+    ``ValueError`` to reject an illegal choice (e.g. a card that isn't
+    actually the lowest age in hand) -- see
+    ``innovation.engine.actions.answer_choice``. ``action`` then
+    performs the choice (any ``CardAction``, e.g.
+    ``innovation.engine.actions.meld``) and ``if_done`` runs with the
+    resulting card.
+
+    Deliberately separate from ``OptionalStep``: reusing it here by
+    just never answering ``None`` would leave open a caller "declining"
+    a decision that the rules text doesn't actually allow declining.
+    """
+
+    player_index: int
+    card_name: str
+    action: CardAction
+    if_done: CardEffect
+    validate: CardChoiceValidator | None = None
+
+
+PendingStep = ShareStep | EffectStep | DrawHighestStep | OptionalStep | ChoiceStep

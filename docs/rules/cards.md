@@ -1,6 +1,6 @@
 # Card data
 
-**Status: three cards entered, all with tested dogma effects.** This
+**Status: four cards entered, all with tested dogma effects.** This
 file tracks progress on populating
 [cards/registry.py](../../src/innovation/cards/registry.py) card by
 card, age by age.
@@ -24,7 +24,7 @@ progress explicitly rather than leaving it ambiguous.
 
 | Age | Cards entered | Cards with tested dogma |
 |---|---|---|
-| 1 | 3 / ? (Sailing, Metalworking, Agriculture) | 3 / ? |
+| 1 | 4 / ? (Sailing, Metalworking, Agriculture, Domestication) | 4 / ? |
 | 2 | 0 / ? | 0 / ? |
 | 3 | 0 / ? | 0 / ? |
 | 4 | 0 / ? | 0 / ? |
