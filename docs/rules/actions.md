@@ -56,13 +56,19 @@ function in
   written -- see docs/rules/cards.md), and `ValueError` if the named
   card isn't on top of one of the player's piles.
 - Each `Dogma` also carries an `icon` (the icon type it's printed
-  under on the card), which will determine share/demand eligibility --
-  it's stored now but not yet consulted by `dogma`.
-- TODO: The share/demand distinction: when non-active players
-  participate "for free" (share) vs. only if they meet an icon-count
-  threshold (demand), and what the active player's icon count
-  controls. Not modeled at all yet -- every effect currently only runs
-  for the acting player passed to `dogma`.
+  under on the card), which determines share/demand eligibility.
+- Share eligibility is implemented (`engine/sharing.eligible_to_share`):
+  a non-active player is eligible to share a dogma effect when their
+  count of the dogma's `icon` is >= the active player's count (ties
+  are eligible; confirmed). This only answers "who *may* share" --
+  `dogma` doesn't consult it yet, and sharing is optional per eligible
+  player, so activating a dogma once sharing is wired in becomes a
+  multi-step process (each eligible player decides in turn) rather
+  than the single-player call it is today.
+- TODO: demanding -- when the active player forces a non-eligible
+  (i.e. fewer-icon) player to suffer part of the effect instead -- has
+  no eligibility query yet, symmetric to `eligible_to_share` but with
+  the comparison flipped.
 - TODO: The "I" rule for repeating an effect once per matching icon --
   confirm and state precisely once found in the rulebook. (Note:
   Sailing does *not* use this pattern -- its dogma is a flat "draw and
