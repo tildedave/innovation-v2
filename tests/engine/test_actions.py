@@ -2,7 +2,14 @@
 
 import pytest
 
-from innovation.engine.actions import SupplyExhaustedError, draw, draw_and_meld, meld
+from innovation.engine.actions import (
+    SupplyExhaustedError,
+    draw,
+    draw_and_meld,
+    draw_and_tuck,
+    meld,
+    tuck,
+)
 from innovation.model.card import Card, CardIcons
 from innovation.model.enums import Color, Icon, Splay
 from innovation.model.game_state import GameState
@@ -221,3 +228,117 @@ def test_meld_raises_for_a_card_not_in_hand() -> None:
 
     with pytest.raises(ValueError, match="Currency"):
         meld(state, player_index=0, card_name="Currency")
+
+
+def test_tuck_moves_the_card_from_hand_to_a_new_pile_of_its_color() -> None:
+    card = _card("Pottery", color=Color.RED)
+    state = GameState(players=[PlayerState(name="Ada", hand=[card])])
+
+    tucked = tuck(state, player_index=0, card_name="Pottery")
+
+    assert tucked is card
+    assert state.players[0].hand == []
+    assert state.players[0].board[Color.RED].cards == [card]
+
+
+def test_tuck_places_the_card_underneath_an_existing_pile_of_the_same_color() -> None:
+    old_top = _card("OldTop", color=Color.RED)
+    new_card = _card("NewBottom", color=Color.RED)
+    player = PlayerState(name="Ada", hand=[new_card], board={Color.RED: Pile(cards=[old_top])})
+    state = GameState(players=[player])
+
+    tuck(state, player_index=0, card_name="NewBottom")
+
+    assert player.board[Color.RED].cards == [old_top, new_card]
+
+
+def test_tuck_preserves_the_splay_of_an_existing_pile() -> None:
+    old_top = _card("OldTop", color=Color.RED)
+    new_card = _card("NewBottom", color=Color.RED)
+    player = PlayerState(
+        name="Ada",
+        hand=[new_card],
+        board={Color.RED: Pile(cards=[old_top], splay=Splay.RIGHT)},
+    )
+    state = GameState(players=[player])
+
+    tuck(state, player_index=0, card_name="NewBottom")
+
+    assert player.board[Color.RED].splay is Splay.RIGHT
+
+
+def test_tuck_removes_only_the_named_card_from_hand() -> None:
+    keep = _card("Keep")
+    tucked_card = _card("Tuck")
+    player = PlayerState(name="Ada", hand=[keep, tucked_card])
+    state = GameState(players=[player])
+
+    tuck(state, player_index=0, card_name="Tuck")
+
+    assert player.hand == [keep]
+
+
+def test_tuck_raises_for_a_card_not_in_hand() -> None:
+    player = PlayerState(name="Ada", hand=[_card("Pottery")])
+    state = GameState(players=[player])
+
+    with pytest.raises(ValueError, match="Currency"):
+        tuck(state, player_index=0, card_name="Currency")
+
+
+def test_draw_and_tuck_places_the_card_directly_onto_a_new_pile() -> None:
+    card = _card("Pottery", age=1, color=Color.RED)
+    state = GameState(players=[PlayerState(name="Ada")], supply={1: [card]})
+
+    tucked = draw_and_tuck(state, player_index=0, age=1)
+
+    assert tucked is card
+    assert state.players[0].hand == []
+    assert state.players[0].board[Color.RED].cards == [card]
+    assert state.supply[1] == []
+
+
+def test_draw_and_tuck_places_the_card_underneath_an_existing_pile() -> None:
+    old_top = _card("OldTop", color=Color.RED)
+    new_card = _card("NewBottom", age=1, color=Color.RED)
+    player = PlayerState(name="Ada", board={Color.RED: Pile(cards=[old_top])})
+    state = GameState(players=[player], supply={1: [new_card]})
+
+    draw_and_tuck(state, player_index=0, age=1)
+
+    assert player.board[Color.RED].cards == [old_top, new_card]
+
+
+def test_draw_and_tuck_preserves_the_splay_of_an_existing_pile() -> None:
+    old_top = _card("OldTop", color=Color.RED)
+    new_card = _card("NewBottom", age=1, color=Color.RED)
+    player = PlayerState(name="Ada", board={Color.RED: Pile(cards=[old_top], splay=Splay.LEFT)})
+    state = GameState(players=[player], supply={1: [new_card]})
+
+    draw_and_tuck(state, player_index=0, age=1)
+
+    assert player.board[Color.RED].splay is Splay.LEFT
+
+
+def test_draw_and_tuck_falls_back_to_the_next_age_when_the_pile_is_empty() -> None:
+    card = _card("Currency", age=2)
+    state = GameState(players=[PlayerState(name="Ada")], supply={1: [], 2: [card]})
+
+    tucked = draw_and_tuck(state, player_index=0, age=1)
+
+    assert tucked is card
+
+
+def test_draw_and_tuck_raises_supply_exhausted_when_nothing_is_available() -> None:
+    state = GameState(players=[PlayerState(name="Ada")], supply={9: [], 10: []})
+
+    with pytest.raises(SupplyExhaustedError, match="age 9"):
+        draw_and_tuck(state, player_index=0, age=9)
+
+
+@pytest.mark.parametrize("age", [0, -1, 11])
+def test_draw_and_tuck_rejects_an_age_outside_one_through_ten(age: int) -> None:
+    state = GameState(players=[PlayerState(name="Ada")])
+
+    with pytest.raises(ValueError, match="age"):
+        draw_and_tuck(state, player_index=0, age=age)

@@ -54,6 +54,19 @@ def draw_and_meld(state: GameState, player_index: int, age: int) -> Card:
     return card
 
 
+def draw_and_tuck(state: GameState, player_index: int, age: int) -> Card:
+    """The given player draws a card of the given age and tucks it directly.
+
+    Same age-fallback as ``draw``, but the drawn card goes straight
+    onto the *bottom* of its own color's pile on the player's board --
+    it never enters their hand. Used by "draw and tuck" dogma effects.
+    """
+    _validate_age(age)
+    card = _draw_card_of_age_or_higher(state, age)
+    _tuck_onto_board(state.players[player_index], card)
+    return card
+
+
 def _validate_age(age: int) -> None:
     if not 1 <= age <= 10:
         raise ValueError(f"age must be between 1 and 10, got {age}")
@@ -81,6 +94,20 @@ def meld(state: GameState, player_index: int, card_name: str) -> Card:
     return card
 
 
+def tuck(state: GameState, player_index: int, card_name: str) -> Card:
+    """The given player tucks a named card from their hand under its board pile.
+
+    Same as ``meld``, except the card is removed from hand and placed
+    at the *bottom* of its own color's pile (creating the pile if
+    needed) rather than on top -- the existing top card and the pile's
+    splay direction are unaffected.
+    """
+    player = state.players[player_index]
+    card = _take_from_hand(player, card_name)
+    _tuck_onto_board(player, card)
+    return card
+
+
 def _take_from_hand(player: PlayerState, card_name: str) -> Card:
     for index, card in enumerate(player.hand):
         if card.name == card_name:
@@ -91,6 +118,11 @@ def _take_from_hand(player: PlayerState, card_name: str) -> Card:
 def _meld_onto_board(player: PlayerState, card: Card) -> None:
     pile = player.board.setdefault(card.color, Pile())
     pile.cards.insert(0, card)
+
+
+def _tuck_onto_board(player: PlayerState, card: Card) -> None:
+    pile = player.board.setdefault(card.color, Pile())
+    pile.cards.append(card)
 
 
 def achieve(state: GameState, player_index: int, age: int) -> None:

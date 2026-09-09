@@ -17,9 +17,10 @@ function in
 - TODO: what actually happens when `SupplyExhaustedError` is raised
   (an end-of-game trigger per the rulebook) isn't handled yet; that
   belongs in the turn loop (`engine/game.py`), not in `draw` itself.
-- `engine/actions.draw_and_meld` is the "draw and meld" variant used
-  by many dogma effects: same age-fallback as `draw`, but the card
-  goes straight onto the board (see Meld below) instead of the hand.
+- `engine/actions.draw_and_meld` and `engine/actions.draw_and_tuck` are
+  the "draw and meld"/"draw and tuck" variants used by many dogma
+  effects: same age-fallback as `draw`, but the card goes straight
+  onto the board (see Meld below) instead of the hand.
 
 ## Meld
 
@@ -27,6 +28,9 @@ function in
   the top of its own color's pile, creating the pile if needed. A
   pile's existing splay direction carries over unchanged when a new
   card is melded onto it (confirmed).
+- Tuck (`engine/actions.tuck`) is the same, except the card goes to
+  the *bottom* of its color's pile instead of the top -- used by
+  "tuck" dogma effects rather than the base turn actions.
 - Splaying: what it is, the four directions, and which icons become
   visible/countable as a result. (See [glossary.md](glossary.md).)
   Splay left (`engine/board.splay_left`) exposes the bottom-right icon
