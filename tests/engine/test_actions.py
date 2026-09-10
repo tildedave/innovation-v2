@@ -782,24 +782,67 @@ def test_dogma_full_sharing_flow_matches_turn_order_and_resolves_in_order() -> N
     assert decision.player_index == 3
     assert decision.card_name == "Effectful"
 
-    # Player 3 shares: draws a card, then it's Player 1's turn to decide.
-    # Sharing also queues a bonus draw for the active player, at the end.
+    # Player 3 shares: eligibility for the whole round is already
+    # settled, so this only records their opt-in -- nothing has drawn
+    # yet, since Player 1 still hasn't been asked. Sharing does queue a
+    # bonus draw for the active player, at the end.
     state = answer_share(state, share=True)
-    assert state.players[3].hand == (card_z,)
+    assert state.players[3].hand == ()
     decision = pending_decision(state)
     assert decision is not None
     assert decision.player_index == 1
 
-    # Player 1 declines: no card for them. The active player's own
-    # effect then runs automatically, followed by the queued bonus draw
-    # (both need no decision) -- two cards for the active player, since
-    # their highest top-card age (1) matches the dogma's own draw age.
+    # Player 1 declines. With every eligible player now asked, the
+    # queued effects finally run: Player 3's shared copy first (in turn
+    # order), then the active player's own, then the queued bonus draw
+    # -- two cards for the active player, since their highest top-card
+    # age (1) matches the dogma's own draw age.
     state = answer_share(state, share=False)
     assert state.players[1].hand == ()
+    assert state.players[3].hand == (card_z,)
     assert state.players[2].hand == (card_y, card_x)
     assert state.supply[1] == (card_w,)
     assert pending_decision(state) is None
     assert state.pending_steps == ()
+
+
+def test_no_effect_runs_until_every_eligible_player_has_answered() -> None:
+    """Sharing is a two-phase process: eligibility and opt-in decisions
+    for *every* eligible player come first, and only once all of them
+    have answered does anyone's effect (sharers' or the active
+    player's) actually run -- not interleaved one decision at a time.
+    """
+    calls: list[int] = []
+
+    def record_and_draw(state: GameState, player_index: int) -> GameState:
+        calls.append(player_index)
+        state, _ = draw(state, player_index, age=1)
+        return state
+
+    active_card = _card_with_dogmas(
+        "Effectful", Dogma(text="Draw a 1.", icon=Icon.CROWN, effect=record_and_draw)
+    )
+    active = PlayerState(name="Active", board={Color.RED: Pile(cards=(active_card,))})
+    sharer_a = PlayerState(name="A", board={Color.YELLOW: _crown_pile("A", Color.YELLOW)})
+    sharer_b = PlayerState(name="B", board={Color.GREEN: _crown_pile("B", Color.GREEN)})
+    state = GameState(
+        players=(active, sharer_a, sharer_b),
+        supply={1: tuple(_card(f"Card{i}") for i in range(4))},
+    )
+
+    state = dogma(state, player_index=0, card_name="Effectful")
+    assert pending_decision(state).player_index == 1
+
+    # First sharer says yes -- nothing has run yet, including for them.
+    state = answer_share(state, share=True)
+    assert calls == []
+    assert pending_decision(state).player_index == 2
+
+    # Second (last) sharer says yes -- only now does everything run, in
+    # turn order (both sharers, then the active player).
+    state = answer_share(state, share=True)
+    assert calls == [1, 2, 0]
+    assert pending_decision(state) is None
 
 
 def _noop(state: GameState, player_index: int) -> GameState:

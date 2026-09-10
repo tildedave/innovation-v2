@@ -89,11 +89,18 @@ function in
   at the front (no decision needed) until it hits a step that needs
   one or empties the queue. `pending_decision(state)` returns whatever
   decision-requiring step is currently at the front (a `ShareStep` or
-  `OptionalStep`; `None` if nothing's pending), and
-  `answer_share(state, share)` resolves a pending `ShareStep` --
-  running that player's copy of the effect first if `share` is `True`
-  -- then advances the queue the same way (it raises if the pending
-  step isn't a `ShareStep`). When nobody is eligible, the queue is just
+  `OptionalStep`; `None` if nothing's pending).
+- Eligibility runs first, for every eligible player at once, before
+  anyone's effect executes: `answer_share(state, share)` resolves a
+  pending `ShareStep` by asking, not acting -- a `True` answer only
+  queues that player's own copy of the effect (immediately before the
+  active player's closing `EffectStep`, so it still lands in turn
+  order), it doesn't run it yet (it raises if the pending step isn't a
+  `ShareStep`). Only once every eligible player in the round has
+  answered -- i.e. once the front of the queue is no longer a
+  `ShareStep` for this effect -- does the queue fall through and
+  actually run the queued effects, in turn order, followed by the
+  active player's own. When nobody is eligible, the queue is just
   `[EffectStep]` and it all resolves inside the original `dogma` call,
   same as before sharing existed.
 - Confirmed: if *any* player shares (the first "yes" for a given dogma

@@ -280,11 +280,16 @@ def pending_decision(state: GameState) -> ShareStep | OptionalStep | ChoiceStep 
 def answer_share(state: GameState, share: bool) -> GameState:
     """Resolve the pending share decision (see ``pending_decision``).
 
-    If ``share`` is True, the eligible player's copy of the effect
-    runs (for free) before the queue advances, and -- the first time
-    this happens for the current dogma activation -- a
-    ``DrawHighestStep`` for the active player is queued at the end
-    (see ``DrawHighestStep``). If ``share`` is False, both are skipped.
+    Every eligible player's ``ShareStep`` for this effect is asked
+    before any of their effects run: a "yes" here only queues the
+    sharer's own ``EffectStep`` (see ``_queue_share_effect``) -- it
+    doesn't run anything yet, since a later player in the same round
+    still has to answer. Only once the round's last ``ShareStep`` is
+    resolved does ``_advance`` fall through and actually run the
+    queued effects, in turn order, followed by the active player's own
+    ``EffectStep``. The first "yes" for the current dogma activation
+    also queues a ``DrawHighestStep`` for the active player at the end
+    of the queue (see ``DrawHighestStep``); a "no" queues neither.
     Raises ``ValueError`` if no share decision is pending.
     """
     step = pending_decision(state)
@@ -292,9 +297,30 @@ def answer_share(state: GameState, share: bool) -> GameState:
         raise ValueError("no pending share decision to answer")
     state = replace(state, pending_steps=state.pending_steps[1:])
     if share:
-        state = step.effect(state, step.player_index)
+        state = _queue_share_effect(state, step)
         state = _queue_share_bonus_draw(state, step.active_player_index)
     return _advance(state)
+
+
+def _queue_share_effect(state: GameState, step: ShareStep) -> GameState:
+    """Queue the sharer's own copy of the effect, to run once the round's
+    remaining ``ShareStep``s are all answered (see ``answer_share``).
+
+    Inserted immediately before the active player's closing
+    ``EffectStep`` for this same dogma effect -- the only ``EffectStep``
+    in the queue at this point (any earlier "yes" this round already
+    landed here too, so this keeps every sharer's effect in turn order,
+    ahead of the active player's).
+    """
+    pending = state.pending_steps
+    anchor = next(
+        index
+        for index, queued in enumerate(pending)
+        if isinstance(queued, EffectStep) and queued.player_index == step.active_player_index
+    )
+    sharer_step = EffectStep(player_index=step.player_index, effect=step.effect)
+    new_pending = (*pending[:anchor], sharer_step, *pending[anchor:])
+    return replace(state, pending_steps=new_pending)
 
 
 def answer_optional(state: GameState, card_name: str | None) -> GameState:

@@ -49,14 +49,21 @@ already checks) -- otherwise returns normally. See
 class ShareStep:
     """The game is waiting on ``player_index`` to decide whether to share.
 
-    If they choose to share, ``effect`` runs for them (for free, at no
-    cost to their own turn) before the next step in the queue runs, and
-    (if this is the first "yes" for this dogma activation) a
-    ``DrawHighestStep`` for ``active_player_index`` is queued at the
-    end -- see ``DrawHighestStep``. ``active_player_index`` is who
-    activated the dogma (not who's being asked to share).
-    ``card_name`` is carried along for display purposes (e.g. "Ask
-    Player 3 if they want to share in Sailing?").
+    Eligibility for every player who may share this effect is settled
+    up front (see ``innovation.engine.sharing.eligible_to_share``), and
+    each of them answers this ``ShareStep`` in turn order before any
+    effect actually runs: choosing to share only queues ``effect`` to
+    run for them later (for free, at no cost to their own turn), it
+    doesn't run it immediately -- see
+    ``innovation.engine.actions.answer_share``. Only once every
+    eligible player has answered does the queue fall through and run
+    the effects that were opted into, in turn order, followed by the
+    active player's own copy. (If this is the first "yes" for this
+    dogma activation, a ``DrawHighestStep`` for ``active_player_index``
+    is also queued, at the very end -- see ``DrawHighestStep``.)
+    ``active_player_index`` is who activated the dogma (not who's being
+    asked to share). ``card_name`` is carried along for display
+    purposes (e.g. "Ask Player 3 if they want to share in Sailing?").
     """
 
     player_index: int
