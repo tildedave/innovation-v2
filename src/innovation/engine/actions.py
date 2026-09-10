@@ -39,25 +39,33 @@ class SupplyExhaustedError(Exception):
     """
 
 
-def draw(state: GameState, player_index: int, age: int) -> tuple[GameState, Card]:
-    """The given player draws a card of the given age into their hand.
+def draw(state: GameState, player_index: int, age: int | None = None) -> tuple[GameState, Card]:
+    """The given player draws a card into their hand.
 
-    If that age's supply pile is empty, draws from the next higher
-    age instead, repeating until a card is found or the supply is
-    exhausted through age 10.
-
-    TODO: the base turn "Draw" action determines ``age`` itself (from
-    the highest age among the player's top cards) rather than taking
-    it as a parameter -- that selection isn't implemented yet since it
-    needs board/meld state (see ``meld`` below). This function is the
-    primitive both that action and "draw a card of age N" dogma
-    effects are expected to use.
+    ``age`` set explicitly draws a card of that age, falling back to
+    the next higher age if that pile is empty (repeating through age
+    10) -- used by dogma effects that name an age (e.g. Sailing's
+    "draw and meld a 1"). Left unset, ``age`` is the player's own
+    highest melded top-card age instead (same fallback from there) --
+    this is the base turn's Draw action (see docs/rules/actions.md)
+    and the sharing bonus draw (see ``DrawHighestStep``); raises
+    ``ValueError`` if the player has no melded cards to determine an
+    age from.
     """
+    if age is None:
+        age = _highest_melded_age(state.players[player_index])
     _validate_age(age)
     state, card = _draw_card_of_age_or_higher(state, age)
     player = state.players[player_index]
     new_player = replace(player, hand=(*player.hand, card))
     return _with_player(state, player_index, new_player), card
+
+
+def _highest_melded_age(player: PlayerState) -> int:
+    top_ages = [pile.cards[0].age for pile in player.board.values() if pile.cards]
+    if not top_ages:
+        raise ValueError(f"player {player.name!r} has no melded cards to draw from")
+    return max(top_ages)
 
 
 def draw_and_meld(state: GameState, player_index: int, *, age: int) -> tuple[GameState, Card]:
@@ -384,17 +392,10 @@ def _advance(state: GameState) -> GameState:
         step = state.pending_steps[0]
         state = replace(state, pending_steps=state.pending_steps[1:])
         if isinstance(step, DrawHighestStep):
-            state = _draw_highest(state, step.player_index)
+            state, _ = draw(state, step.player_index)
         else:
             state = step.effect(state, step.player_index)
     return state
-
-
-def _draw_highest(state: GameState, player_index: int) -> GameState:
-    player = state.players[player_index]
-    highest_age = max(pile.cards[0].age for pile in player.board.values() if pile.cards)
-    new_state, _ = draw(state, player_index, age=highest_age)
-    return new_state
 
 
 def _require_top_card(player: PlayerState, card_name: str) -> Card:

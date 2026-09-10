@@ -121,6 +121,50 @@ def test_draw_rejects_an_age_outside_one_through_ten(age: int) -> None:
         draw(state, player_index=0, age=age)
 
 
+def test_draw_without_an_age_uses_the_players_highest_melded_top_card_age() -> None:
+    melded = _card("Melded", age=2, color=Color.RED)
+    one, two = _card("One", age=1), _card("Two", age=2)
+    player = PlayerState(name="Ada", board={Color.RED: Pile(cards=(melded,))})
+    state = GameState(players=(player,), supply={1: (one,), 2: (two,)})
+
+    new_state, drawn = draw(state, player_index=0)
+
+    assert drawn is two
+    assert new_state.players[0].hand == (two,)
+
+
+def test_draw_without_an_age_picks_the_highest_across_several_piles() -> None:
+    low = _card("Low", age=1, color=Color.RED)
+    high = _card("High", age=3, color=Color.BLUE)
+    three = _card("Three", age=3)
+    player = PlayerState(
+        name="Ada", board={Color.RED: Pile(cards=(low,)), Color.BLUE: Pile(cards=(high,))}
+    )
+    state = GameState(players=(player,), supply={3: (three,)})
+
+    _, drawn = draw(state, player_index=0)
+
+    assert drawn is three
+
+
+def test_draw_without_an_age_falls_back_to_the_next_age_when_the_pile_is_empty() -> None:
+    melded = _card("Melded", age=1, color=Color.RED)
+    fallback = _card("Fallback", age=2)
+    player = PlayerState(name="Ada", board={Color.RED: Pile(cards=(melded,))})
+    state = GameState(players=(player,), supply={1: (), 2: (fallback,)})
+
+    _, drawn = draw(state, player_index=0)
+
+    assert drawn is fallback
+
+
+def test_draw_without_an_age_raises_when_the_player_has_no_melded_cards() -> None:
+    state = GameState(players=(PlayerState(name="Ada"),), supply={1: (_card("Pottery"),)})
+
+    with pytest.raises(ValueError, match="no melded cards"):
+        draw(state, player_index=0)
+
+
 def test_draw_and_meld_places_the_card_directly_onto_a_new_pile() -> None:
     card = _card("Pottery", age=1, color=Color.RED)
     state = GameState(players=(PlayerState(name="Ada"),), supply={1: (card,)})
