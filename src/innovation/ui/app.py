@@ -12,6 +12,7 @@ import pygame
 
 from innovation.ui.fonts import load_fonts
 from innovation.ui.game_view import draw_game_state
+from innovation.ui.icon_glyphs import load_icon_glyphs
 from innovation.ui.timeline import build_demo_timeline
 
 WINDOW_SIZE = (1280, 800)
@@ -25,6 +26,7 @@ def main() -> None:
     pygame.display.set_caption(WINDOW_TITLE)
     clock = pygame.time.Clock()
     fonts = load_fonts()
+    icon_glyphs = load_icon_glyphs(fonts.small)
 
     timeline = build_demo_timeline()
     index = 0
@@ -48,7 +50,7 @@ def main() -> None:
 
         step = timeline[index]
         step_label = f"step {index + 1}/{len(timeline)}: {step.label}"
-        draw_game_state(screen, fonts, step.state, step_label)
+        draw_game_state(screen, fonts, icon_glyphs, step.state, step_label)
         pygame.display.flip()
         clock.tick(FRAME_RATE)
 

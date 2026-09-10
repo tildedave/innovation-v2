@@ -35,6 +35,22 @@ ICON_LABELS: dict[Icon, str] = {
     Icon.BULB: "Bb",
     Icon.NONE: "",
 }
+"""Fallback used in place of ``ICON_EMOJI`` on a system with no emoji
+font available -- see ``innovation.ui.icon_glyphs``."""
+
+ICON_EMOJI: dict[Icon, str] = {
+    Icon.CASTLE: "🏰",
+    Icon.CROWN: "👑",
+    Icon.LEAF: "🍃",
+    Icon.FACTORY: "🏭",
+    Icon.CLOCK: "⏰",
+    Icon.BULB: "💡",
+    Icon.NONE: "",
+}
+
+ICON_GLYPH_SIZE = 18
+"""Side length, in pixels, of a pre-rendered icon glyph -- see
+``innovation.ui.icon_glyphs``."""
 
 CARD_WIDTH = 84
 CARD_HEIGHT = 118

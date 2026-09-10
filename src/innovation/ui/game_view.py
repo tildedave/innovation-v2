@@ -7,6 +7,7 @@ from __future__ import annotations
 import pygame
 
 from innovation.engine.actions import pending_decision
+from innovation.model.enums import Icon
 from innovation.model.game_state import GameState
 from innovation.model.pending import ChoiceStep, OptionalStep, ShareStep
 from innovation.ui import layout
@@ -18,6 +19,7 @@ from innovation.ui.theme import BACKGROUND, MUTED_TEXT, PANEL_MARGIN, TEXT
 def draw_game_state(
     surface: pygame.Surface,
     fonts: Fonts,
+    icon_glyphs: dict[Icon, pygame.Surface],
     state: GameState,
     step_label: str,
 ) -> None:
@@ -29,7 +31,14 @@ def draw_game_state(
     players_area = layout.players_area_rect(screen)
     panels = layout.player_panel_rects(players_area, len(state.players))
     for index, (player, panel) in enumerate(zip(state.players, panels, strict=True)):
-        draw_player(surface, fonts, player, panel, is_current=index == state.current_player_index)
+        draw_player(
+            surface,
+            fonts,
+            icon_glyphs,
+            player,
+            panel,
+            is_current=index == state.current_player_index,
+        )
 
     _draw_footer(surface, fonts, state, screen, step_label)
 

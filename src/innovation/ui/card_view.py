@@ -12,7 +12,6 @@ from innovation.ui.theme import (
     CARD_COLORS,
     CARD_CORNER_RADIUS,
     EMPTY_SLOT_BORDER,
-    ICON_LABELS,
     TEXT,
 )
 
@@ -21,6 +20,7 @@ def draw_card(
     surface: pygame.Surface,
     font: pygame.font.Font,
     small_font: pygame.font.Font,
+    icon_glyphs: dict[Icon, pygame.Surface],
     card: Card,
     rect: pygame.Rect,
 ) -> None:
@@ -35,10 +35,10 @@ def draw_card(
     name_band = pygame.Rect(rect.left + 4, rect.top + 38, rect.width - 8, rect.height - 78)
     _draw_wrapped_name(surface, small_font, card.name, name_band)
 
-    _draw_icon(surface, small_font, card.icons.top_left, (rect.left + 8, rect.top + 24))
-    _draw_icon(surface, small_font, card.icons.bottom_left, (rect.left + 8, rect.bottom - 20))
-    _draw_icon(surface, small_font, card.icons.bottom_center, (rect.centerx, rect.bottom - 20))
-    _draw_icon(surface, small_font, card.icons.bottom_right, (rect.right - 8, rect.bottom - 20))
+    _draw_icon(surface, icon_glyphs, card.icons.top_left, (rect.left + 8, rect.top + 24))
+    _draw_icon(surface, icon_glyphs, card.icons.bottom_left, (rect.left + 8, rect.bottom - 20))
+    _draw_icon(surface, icon_glyphs, card.icons.bottom_center, (rect.centerx, rect.bottom - 20))
+    _draw_icon(surface, icon_glyphs, card.icons.bottom_right, (rect.right - 8, rect.bottom - 20))
 
 
 def draw_card_back(surface: pygame.Surface, rect: pygame.Rect) -> None:
@@ -90,12 +90,11 @@ def _wrap_to_width(font: pygame.font.Font, text: str, max_width: int) -> list[st
 
 def _draw_icon(
     surface: pygame.Surface,
-    font: pygame.font.Font,
+    icon_glyphs: dict[Icon, pygame.Surface],
     icon: Icon,
     center: tuple[int, int],
 ) -> None:
-    label = ICON_LABELS[icon]
-    if not label:
+    if icon is Icon.NONE:
         return
-    icon_surface = font.render(label, True, TEXT)
-    surface.blit(icon_surface, icon_surface.get_rect(center=center))
+    glyph = icon_glyphs[icon]
+    surface.blit(glyph, glyph.get_rect(center=center))
