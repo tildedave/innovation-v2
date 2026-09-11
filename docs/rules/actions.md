@@ -7,13 +7,21 @@ function in
 
 ## Draw
 
-- The primitive (`engine/actions.draw`) is implemented: draw a card of
-  a given age, falling back to the next higher age if that pile is
-  empty, up through age 10; raises `SupplyExhaustedError` if nothing
-  is available at or above the requested age.
-- TODO: which age the base turn "Draw" action passes in -- the player's
-  current highest melded age, most likely -- isn't determined yet
-  since it needs `meld`/board state.
+- The primitive (`engine/actions.draw`) is implemented: draw a card
+  into the player's hand, falling back to the next higher age if the
+  requested age's pile is empty, up through age 10; raises
+  `SupplyExhaustedError` if nothing is available at or above the
+  requested age.
+- `age` is optional. Passed explicitly, it's used as given (e.g.
+  Sailing's "draw and meld a 1" passes `age=1`). Left unset, `age` is
+  the player's own highest melded top-card age instead (same
+  fallback from there) -- this is both the base turn's Draw action and
+  the sharing bonus draw (`DrawHighestStep`, see "Sharing" below), which
+  share this exact rule ("draw a card of your highest top-card age").
+  Raises `ValueError` if the player has no melded cards to determine
+  an age from -- shouldn't happen mid-game since the opening meld
+  (`engine/setup.start_game`) guarantees at least one before any
+  turn starts.
 - TODO: what actually happens when `SupplyExhaustedError` is raised
   (an end-of-game trigger per the rulebook) isn't handled yet; that
   belongs in the turn loop (`engine/game.py`), not in `draw` itself.

@@ -24,15 +24,28 @@ class GameState:
     decision is pending) is always just a field read, not something
     reconstructed from a mutation log.
 
-    ``current_player_index`` is whose turn it is. Nothing advances it
-    automatically yet -- the turn loop itself isn't implemented (see
-    ``innovation.engine.game``) -- but it's real state now so a future
-    UI has something to read.
+    ``current_player_index`` is whose turn it is -- see
+    ``innovation.engine.game.start_turn``/``take_*_action`` for the
+    turn loop that advances it (a player's actions run out, or the
+    lexicographically-first opening meld picks it initially, see
+    ``innovation.engine.setup``).
+
+    ``actions_remaining`` is how many of the current player's turn
+    actions (Draw, Meld, Dogma, Achieve) are left to take. Zero means
+    no turn is in progress -- ``engine.game.start_turn`` must be called
+    to begin one. Two per turn, except the very first turn of the
+    game, which is one (see ``first_turn_taken`` and
+    docs/rules/overview.md).
+
+    ``first_turn_taken`` marks whether the game's one-action opening
+    turn has already happened, so every later call to
+    ``engine.game.start_turn`` knows to grant two actions instead.
 
     ``pending_steps`` is the queue of work left to finish resolving an
     in-progress dogma activation (see ``innovation.model.pending`` and
-    ``innovation.engine.actions.dogma``/``answer_share``). Empty means
-    nothing is waiting on a decision.
+    ``innovation.engine.actions.dogma``/``answer_share``) or the
+    opening meld (see ``innovation.engine.setup.start_game``). Empty
+    means nothing is waiting on a decision.
 
     ``supply`` maps age -> that age's remaining deck, with ``[0]`` the
     next card to be drawn (see ``innovation.engine.actions.draw``).
@@ -40,12 +53,14 @@ class GameState:
     read-only ``Mapping`` for the same reason and with the same
     runtime caveat -- see ``innovation.model.player``.
 
-    TODO: Add the special-achievements pool once the turn loop (see
-    ``innovation.engine.game``) is designed.
+    TODO: Add the special-achievements pool once Achieve (see
+    ``innovation.engine.actions.achieve``) is designed.
     """
 
     players: tuple[PlayerState, ...] = field(default_factory=tuple)
     current_player_index: int = 0
+    actions_remaining: int = 0
+    first_turn_taken: bool = False
     pending_steps: tuple[PendingStep, ...] = field(default_factory=tuple)
     supply: Mapping[int, tuple[Card, ...]] = field(default_factory=dict)
     achievements_available: tuple[Card, ...] = field(default_factory=tuple)
