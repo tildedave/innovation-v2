@@ -54,9 +54,18 @@ function in
 
 ## Achieve
 
-- Eligibility: score total required relative to the achievement's age,
-  and whether a matching top-card icon count is also required.
-- What happens to the claimed achievement card.
+- Implemented (`engine/actions.achieve`): one card per age is set aside
+  at game start as that age's achievement (`GameState.achievements_available`);
+  each can be claimed by at most one player. To claim the achievement
+  of a given age, a player spends one of their per-turn actions and
+  must satisfy both:
+  - A top card on one of their piles of age >= the achievement's age.
+  - A score pile whose total value (`engine/actions.score_pile_value`
+    -- the sum of its cards' ages) is >= 5 times the achievement's age.
+  Raises `ValueError` if no achievement of that age is available, or if
+  either condition isn't met.
+- The claimed card moves from `achievements_available` to the player's
+  `PlayerState.achievements`; it can't be claimed again by anyone else.
 
 ## Dogma
 

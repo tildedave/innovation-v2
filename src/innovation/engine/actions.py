@@ -5,9 +5,6 @@ it's given (see ``innovation.model`` and ``innovation.engine`` for why).
 Most also return the ``Card`` the action was about, since the caller
 usually needs to know which card was drawn/melded/tucked and re-deriving
 that from the new state alone would be more awkward than useful.
-
-TODO: Implement Achieve against ``GameState``/``PlayerState``. See
-docs/rules/actions.md for the rules each function must satisfy.
 """
 
 from __future__ import annotations
@@ -221,9 +218,52 @@ def _tuck_onto_board(player: PlayerState, card: Card) -> PlayerState:
     return replace(player, board=new_board)
 
 
-def achieve(state: GameState, player_index: int, age: int) -> None:
-    """The active player claims an achievement they qualify for."""
-    raise NotImplementedError
+def achieve(state: GameState, player_index: int, age: int) -> tuple[GameState, Card]:
+    """The given player claims the available achievement of the given age.
+
+    Moves the matching card from ``state.achievements_available`` to
+    the player's ``achievements``. Raises ``ValueError`` if no
+    achievement of that age is available (already claimed, or never
+    set aside), or if the player doesn't qualify: qualifying requires
+    both a top card on one of the player's piles of age >= the
+    achievement's age, and a score pile whose total value (summed by
+    card age, per ``score_pile_value``) is >= 5 times the achievement's
+    age.
+    """
+    achievement = _require_available_achievement(state, age)
+    player = state.players[player_index]
+    _validate_can_achieve(player, achievement)
+    new_player = replace(player, achievements=(*player.achievements, achievement))
+    new_available = tuple(card for card in state.achievements_available if card is not achievement)
+    state = _with_player(state, player_index, new_player)
+    return replace(state, achievements_available=new_available), achievement
+
+
+def score_pile_value(player: PlayerState) -> int:
+    """The total value of a player's score pile: the sum of its cards' ages."""
+    return sum(card.age for card in player.score_pile)
+
+
+def _require_available_achievement(state: GameState, age: int) -> Card:
+    for achievement in state.achievements_available:
+        if achievement.age == age:
+            return achievement
+    raise ValueError(f"no achievement available for age {age}")
+
+
+def _validate_can_achieve(player: PlayerState, achievement: Card) -> None:
+    top_ages = [pile.cards[0].age for pile in player.board.values() if pile.cards]
+    if not top_ages or max(top_ages) < achievement.age:
+        raise ValueError(
+            f"player {player.name!r} has no top card of age {achievement.age} or higher"
+        )
+    required = 5 * achievement.age
+    total = score_pile_value(player)
+    if total < required:
+        raise ValueError(
+            f"player {player.name!r} score pile totals {total}, needs at least {required} "
+            f"to achieve age {achievement.age}"
+        )
 
 
 def dogma(state: GameState, player_index: int, card_name: str) -> GameState:

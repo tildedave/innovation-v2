@@ -1,9 +1,12 @@
 """Tests for the Draw, Meld, Tuck, and Dogma actions (src/innovation/engine/actions.py)."""
 
+from dataclasses import replace
+
 import pytest
 
 from innovation.engine.actions import (
     SupplyExhaustedError,
+    achieve,
     answer_optional,
     answer_share,
     dogma,
@@ -15,6 +18,7 @@ from innovation.engine.actions import (
     return_card,
     reveal,
     score,
+    score_pile_value,
     tuck,
 )
 from innovation.model.card import Card, CardIcons, Dogma
@@ -889,6 +893,131 @@ def test_declining_a_share_does_not_queue_a_bonus_draw() -> None:
 
     assert state.players[0].hand == ()
     assert state.supply[1] == (_card("Unused"),)
+
+
+def test_score_pile_value_sums_the_ages_of_scored_cards() -> None:
+    player = PlayerState(name="Ada", score_pile=(_card("A", age=1), _card("B", age=3)))
+
+    assert score_pile_value(player) == 4
+
+
+def test_score_pile_value_is_zero_for_an_empty_score_pile() -> None:
+    assert score_pile_value(PlayerState(name="Ada")) == 0
+
+
+def _qualifying_player(name: str, age: int, achievements: tuple[Card, ...] = ()) -> PlayerState:
+    """A player with a top card and score pile just barely enough to
+    achieve the given age (a top card of that age, and a score pile
+    totaling exactly 5x it)."""
+    top_card = _card(f"{name}-top", age=age, color=Color.RED)
+    score_cards = tuple(_card(f"{name}-score{i}", age=age) for i in range(5))
+    return PlayerState(
+        name=name,
+        board={Color.RED: Pile(cards=(top_card,))},
+        score_pile=score_cards,
+        achievements=achievements,
+    )
+
+
+def test_achieve_claims_the_matching_achievement() -> None:
+    achievement = _card("Achievement", age=1)
+    player = _qualifying_player("Ada", age=1)
+    state = GameState(players=(player,), achievements_available=(achievement,))
+
+    new_state, claimed = achieve(state, player_index=0, age=1)
+
+    assert claimed is achievement
+    assert new_state.players[0].achievements == (achievement,)
+    assert new_state.achievements_available == ()
+
+
+def test_achieve_does_not_modify_the_original_state() -> None:
+    achievement = _card("Achievement", age=1)
+    player = _qualifying_player("Ada", age=1)
+    state = GameState(players=(player,), achievements_available=(achievement,))
+
+    achieve(state, player_index=0, age=1)
+
+    assert state.players[0].achievements == ()
+    assert state.achievements_available == (achievement,)
+
+
+def test_achieve_only_removes_the_matching_achievement() -> None:
+    achievement_1 = _card("Achievement1", age=1)
+    achievement_2 = _card("Achievement2", age=2)
+    player = _qualifying_player("Ada", age=2)
+    state = GameState(players=(player,), achievements_available=(achievement_1, achievement_2))
+
+    new_state, claimed = achieve(state, player_index=0, age=2)
+
+    assert claimed is achievement_2
+    assert new_state.achievements_available == (achievement_1,)
+
+
+def test_achieve_appends_after_existing_achievements() -> None:
+    already_claimed = _card("Already", age=1)
+    achievement = _card("Achievement", age=2)
+    player = _qualifying_player("Ada", age=2, achievements=(already_claimed,))
+    state = GameState(players=(player,), achievements_available=(achievement,))
+
+    new_state, _ = achieve(state, player_index=0, age=2)
+
+    assert new_state.players[0].achievements == (already_claimed, achievement)
+
+
+def test_achieve_raises_when_no_achievement_is_available_for_that_age() -> None:
+    player = _qualifying_player("Ada", age=1)
+    state = GameState(players=(player,), achievements_available=())
+
+    with pytest.raises(ValueError, match="age 1"):
+        achieve(state, player_index=0, age=1)
+
+
+def test_achieve_raises_when_the_achievement_was_already_claimed_by_someone_else() -> None:
+    achievement = _card("Achievement", age=1)
+    claimant = replace(_qualifying_player("Claimant", age=1), achievements=(achievement,))
+    hopeful = _qualifying_player("Ada", age=1)
+    state = GameState(players=(claimant, hopeful), achievements_available=())
+
+    with pytest.raises(ValueError, match="age 1"):
+        achieve(state, player_index=1, age=1)
+
+
+def test_achieve_raises_when_the_score_pile_total_is_below_five_times_the_age() -> None:
+    achievement = _card("Achievement", age=2)
+    top_card = _card("Top", age=2, color=Color.RED)
+    player = PlayerState(
+        name="Ada",
+        board={Color.RED: Pile(cards=(top_card,))},
+        score_pile=(_card("S", age=2),),  # value 2, needs 10
+    )
+    state = GameState(players=(player,), achievements_available=(achievement,))
+
+    with pytest.raises(ValueError, match="score pile"):
+        achieve(state, player_index=0, age=2)
+
+
+def test_achieve_raises_when_no_top_card_meets_the_achievements_age() -> None:
+    achievement = _card("Achievement", age=2)
+    top_card = _card("Top", age=1, color=Color.RED)
+    score_cards = tuple(_card(f"S{i}", age=2) for i in range(5))
+    player = PlayerState(
+        name="Ada", board={Color.RED: Pile(cards=(top_card,))}, score_pile=score_cards
+    )
+    state = GameState(players=(player,), achievements_available=(achievement,))
+
+    with pytest.raises(ValueError, match="top card"):
+        achieve(state, player_index=0, age=2)
+
+
+def test_achieve_raises_when_the_player_has_no_top_cards_at_all() -> None:
+    achievement = _card("Achievement", age=1)
+    score_cards = tuple(_card(f"S{i}", age=1) for i in range(5))
+    player = PlayerState(name="Ada", score_pile=score_cards)
+    state = GameState(players=(player,), achievements_available=(achievement,))
+
+    with pytest.raises(ValueError, match="top card"):
+        achieve(state, player_index=0, age=1)
 
 
 def test_multiple_shares_only_queue_a_single_bonus_draw() -> None:

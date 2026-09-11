@@ -25,8 +25,11 @@ class PlayerState:
     stops a caller from mutating the underlying ``dict`` directly, so
     don't -- treat it as immutable like every other field here.
 
-    TODO: Add achievement/special-achievement bookkeeping details once
-    the engine's action logic (see docs/rules/actions.md) is designed.
+    ``achievements`` holds the achievement cards this player has
+    claimed (see ``innovation.engine.actions.achieve``).
+
+    TODO: Add special-achievement bookkeeping once that's designed --
+    ``achievements`` currently only covers ordinary, age-based ones.
     """
 
     name: str
