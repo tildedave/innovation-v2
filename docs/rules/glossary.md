@@ -15,7 +15,7 @@ the corresponding rule gets implemented -- precise wording belongs in
 | Score | Move a card to your score pile (face down/counted, not part of your visible board). Implemented as `engine/actions.score` (from hand). | Confirm how score-pile value is computed. |
 | Draw | Take the top card of a given age from the supply into your hand. | -- |
 | Reveal | Show a card to the table without otherwise changing anything about it. A no-op on game state (`engine/actions.reveal`), always contextual to a `Zone` (hand, score pile, board, or supply -- see `model/enums.Zone`) -- it exists as an explicit call site for effects that reveal a card, so an eventual UI has something to render. | -- |
-| Achieve | Claim an achievement card once eligible. | See actions.md. |
+| Achieve | Claim an achievement card once eligible: a top card of at least the achievement's age, and a score pile totaling at least 5 times the achievement's age. Implemented as `engine/actions.achieve`. | -- |
 | Dogma | Activate the printed effect(s) of a card already on your board. | See actions.md. |
 | Share | A non-active player, eligible by icon count, opts in to a dogma effect for themselves; if anyone does, the active player also draws a bonus card at their own highest top-card age once resolution finishes (confirmed). | -- |
 | Demand | The active player forces non-active players to suffer part of a dogma effect, gated on an icon-count comparison. | Confirm exact trigger condition. |
