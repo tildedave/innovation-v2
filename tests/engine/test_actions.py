@@ -1,7 +1,5 @@
 """Tests for the Draw, Meld, Tuck, and Dogma actions (src/innovation/engine/actions.py)."""
 
-from dataclasses import replace
-
 import pytest
 
 from innovation.engine.actions import (
@@ -975,9 +973,10 @@ def test_achieve_raises_when_no_achievement_is_available_for_that_age() -> None:
 
 def test_achieve_raises_when_the_achievement_was_already_claimed_by_someone_else() -> None:
     achievement = _card("Achievement", age=1)
-    claimant = replace(_qualifying_player("Claimant", age=1), achievements=(achievement,))
+    claimant = _qualifying_player("Claimant", age=1)
     hopeful = _qualifying_player("Ada", age=1)
-    state = GameState(players=(claimant, hopeful), achievements_available=())
+    state = GameState(players=(claimant, hopeful), achievements_available=(achievement,))
+    state, _ = achieve(state, player_index=0, age=1)
 
     with pytest.raises(ValueError, match="age 1"):
         achieve(state, player_index=1, age=1)
