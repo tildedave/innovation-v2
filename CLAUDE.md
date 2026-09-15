@@ -32,5 +32,9 @@ next steps.
 
 This is a rules engine first (see [docs/architecture.md](docs/architecture.md)).
 
-A CLI or other interface is deliberately out of scope until the engine
-can play a full game.
+A dev/debug visualizer (`innovation.ui`, built on pygame-ce) renders
+`GameState` and steps through engine actions -- see
+[docs/architecture.md](docs/architecture.md). A player-facing
+interface (letting someone actually play a full game through a UI or
+CLI) is still out of scope until the engine has a turn loop and a
+complete card set.

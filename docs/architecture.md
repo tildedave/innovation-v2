@@ -7,6 +7,7 @@ src/innovation/
     model/       plain-data types: Card, PlayerState, GameState
     cards/       canonical Card definitions, including dogma effects
     engine/      rules enforcement: primitive actions and the turn loop
+    ui/          pygame-ce dev/debug visualizer: renders GameState, no rules logic
 ```
 
 ## Design principle: data model vs. rules engine
@@ -73,11 +74,36 @@ individually-processable entry in `GameState`, which is what a future
 UI needs to render each step rather than just a before/after diff. See
 `cards.registry._metalworking_dogma` for the pattern.
 
+## Design principle: visualization is a consumer, not a layer the engine knows about
+
+`innovation.ui` renders a `GameState` and drives `innovation.engine`
+actions to produce the states it renders -- neither `innovation.model`
+nor `innovation.engine` import from `innovation.ui` or depend on
+pygame. The dependency points one way: `ui` -> `engine` -> `model`.
+This is the same split as the model/engine boundary above, one layer
+further out: a future search algorithm or headless script still needs
+only `engine`/`model`, with pygame never imported, and the visualizer
+keeps working as the engine gains a turn loop and more cards without
+needing its own copy of rules logic.
+
+`innovation.ui` is currently a dev/debug tool, not a player-facing
+game UI: `innovation.ui.timeline` drives `engine.actions` through a
+small scripted sequence (there's no turn loop or legal-move
+enumeration yet -- see `innovation.engine.game` -- so it can't offer a
+player real choices) and produces a list of `GameState` snapshots for
+the rendering code to step through and show, one at a time. It's
+expected to grow into a fuller visualization as the engine gains a
+turn loop and a complete card set.
+
 ## Out of scope for now
 
-No CLI, TUI, or other interface exists yet. The engine should be able
-to play a complete game headlessly (i.e. be driven entirely by function
-calls / a script) before an interface is built on top of it.
-`current_player_index` is real state now, but nothing advances it
-automatically -- the turn loop itself (whose turn is next, what ends a
-turn) isn't designed yet.
+No turn loop exists yet (see `innovation.engine.game`), and no
+player-facing interface (CLI or otherwise) exists either --
+`innovation.ui` can render `GameState` and walk through a scripted
+sequence of engine calls for debugging, but can't offer a player real
+choices without a turn loop and legal-move enumeration. The engine
+should be able to play a complete game headlessly (i.e. be driven
+entirely by function calls / a script) before a player-facing
+interface is built on top of it. `current_player_index` is real state
+now, but nothing advances it automatically -- the turn loop itself
+(whose turn is next, what ends a turn) isn't designed yet.
